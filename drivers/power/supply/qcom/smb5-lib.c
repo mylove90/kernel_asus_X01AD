@@ -41,6 +41,247 @@
 			pr_debug("%s: %s: " fmt, chg->name,	\
 				__func__, ##__VA_ARGS__);	\
 	} while (0)
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
+extern struct gpio_control *global_gpio;
+static int ASUS_ADAPTER_ID = 0;
+static bool asus_flow_processing = 0;
+enum ADAPTER_ID {
+	NONE = 0,
+	ASUS_750K,
+	ASUS_200K,
+	PB,
+	OTHERS,
+	ADC_NOT_READY,
+};
+static char *asus_id[] = {
+	"NONE",
+	"ASUS_750K",
+	"ASUS_200K",
+	"PB",
+	"OTHERS",
+	"ADC_NOT_READY"
+};
+//huaqin added for ZQL1830-361 country code by tangqingyong at 20180820 start
+//huaqin added for ZQL1830-1602 country code by tangqingyong at 20181101 start
+extern int country_code;
+//huaqin added for ZQL1830-1602 country code by tangqingyong at 20181101 end
+//huaqin added for ZQL1830-361 country code by tangqingyong at 20180820 end
+
+int asus_get_prop_usb_present(struct smb_charger *chg)
+{
+	union power_supply_propval present_val = {0, };
+	int rc;
+
+	rc = smblib_get_prop_usb_present(chg, &present_val);
+
+	return present_val.intval;
+}
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
+//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor start
+extern struct wake_lock asus_chg_lock;
+extern struct timespec last_jeita_time;
+static struct alarm bat_alarm;
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert start
+//Huaqin modified by tangqingyong for NTC voltage VS degC at 20181008 start
+#define CHG_ALERT_HOT_NTC_VOLTAFE  247170 //70degC
+#define CHG_ALERT_WARM_NTC_VOLTAGE 340931 //60degC
+//Huaqin modified by tangqingyong for NTC voltage VS degC at 20181008 end
+static bool usb_alert_usb_otg_disable=false;
+static bool need_replugin_usb=false;
+static bool usb_otg_present=false;
+void asus_update_usb_connector_state(struct smb_charger *chg);
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert end
+//huaqin added for ZQL1830-199 by tangqingyong demoapp charge at 20180819 start
+extern bool demo_app_property_flag;
+#define	DEMO_DISCHG_THD			60
+#define	DEMO_CHG_THD			58
+int asus_get_prop_batt_capacity(struct smb_charger *chg);
+//huaqin added for ZQL1830-199 by tangqingyong demoapp charge at 20180819 end
+//huaqin added for life span multiplication by tangqingyong  at 20180820 start
+extern int charger_limit_enable_flag;
+extern int charger_limit_value;
+//huaqin added for life span multiplication by tangqingyong  at 20180820 end
+
+static void smblib_uusb_removal(struct smb_charger *chg);
+
+void asus_smblib_stay_awake(struct smb_charger *chg)
+{
+	printk("%s: ASUS set smblib_stay_awake\n", __func__);
+	wake_lock(&asus_chg_lock);
+}
+void asus_smblib_relax(struct smb_charger *chg)
+{
+	printk("%s: ASUS set smblib_relax\n", __func__);
+	wake_unlock(&asus_chg_lock);
+}
+static DEFINE_SPINLOCK(bat_alarm_slock);
+static enum alarmtimer_restart batAlarm_handler(struct alarm *alarm, ktime_t now)
+{
+	printk("%s: batAlarm triggered\n", __func__);
+	return ALARMTIMER_NORESTART;
+}
+void asus_batt_RTC_work(struct work_struct *work)
+{
+	unsigned long batflags;
+	struct timespec new_batAlarm_time;
+	struct timespec mtNow;
+	int RTCSetInterval = 60;
+	struct smb_charger *chg = container_of(work, struct smb_charger,
+					asus_batt_RTC_work.work);
+
+	if (!chg) {
+		CHG_DBG("%s: driver not ready yet!\n", __func__);
+		return;
+	}
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert start
+	if ((!asus_get_prop_usb_present(chg)) && (!usb_otg_present)) {
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert end
+		alarm_cancel(&bat_alarm);
+		CHG_DBG("%s: usb not present, cancel\n", __func__);
+		return;
+	}
+	mtNow = current_kernel_time();
+	new_batAlarm_time.tv_sec = 0;
+	new_batAlarm_time.tv_nsec = 0;
+
+	RTCSetInterval = 60;
+
+	new_batAlarm_time.tv_sec = mtNow.tv_sec + RTCSetInterval;
+	printk("[BAT][CHG] %s: alarm start after %ds\n", __FUNCTION__, RTCSetInterval);
+	spin_lock_irqsave(&bat_alarm_slock, batflags);
+	alarm_start(&bat_alarm, timespec_to_ktime(new_batAlarm_time));
+	spin_unlock_irqrestore(&bat_alarm_slock, batflags);
+}
+
+void smblib_asus_monitor_start(struct smb_charger *chg, int time)
+{
+	cancel_delayed_work(&chg->asus_min_monitor_work);
+	schedule_delayed_work(&chg->asus_min_monitor_work, msecs_to_jiffies(time));
+}
+//huaqin added for ZQL1830-199 by tangqingyong demoapp charge at 20180819 start
+void asus_demoapp_rule(struct smb_charger *chg)
+{
+	int bat_capacity = 0;
+
+	bat_capacity = asus_get_prop_batt_capacity(chg);
+
+	if(bat_capacity >= DEMO_DISCHG_THD){
+		smblib_set_usb_suspend(chg, true);
+		printk("demo_app stop usb charging  ---");
+	}else if((bat_capacity <= DEMO_CHG_THD) && (!usb_alert_usb_otg_disable)){
+		smblib_set_usb_suspend(chg, false);
+		printk("demo_app resume usb charging  ---");
+	}
+}
+//huaqin added for ZQL1830-199 by tangqingyong demoapp charge at 20180819 end
+// Huaqin add for debug by tangqingyong at 2018/9/21 start
+#ifdef UPDATE_CHG_INFO
+static void smblib_update_chg_info(struct smb_charger *chg)
+{
+	union power_supply_propval info_val = {0,};
+	struct smbchg_info chg_info ={0,};
+	if(chg->batt_psy){
+			power_supply_get_property(chg->batt_psy, POWER_SUPPLY_PROP_CAPACITY, &info_val);
+			chg_info.cap = info_val.intval;
+
+			power_supply_get_property(chg->batt_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW, &info_val);
+			chg_info.vbat = info_val.intval;
+
+			power_supply_get_property(chg->batt_psy, POWER_SUPPLY_PROP_CURRENT_NOW, &info_val);
+			chg_info.bat_c= info_val.intval;
+
+			power_supply_get_property(chg->batt_psy, POWER_SUPPLY_PROP_TEMP, &info_val);
+			chg_info.bat_t= info_val.intval;
+
+			power_supply_get_property(chg->batt_psy, POWER_SUPPLY_PROP_STATUS, &info_val);
+			chg_info.sts= info_val.intval;
+
+		}
+
+	if(chg->usb_psy){
+			power_supply_get_property(chg->usb_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW, &info_val);
+			chg_info.vbus= info_val.intval;
+
+			power_supply_get_property(chg->usb_psy, POWER_SUPPLY_PROP_INPUT_CURRENT_NOW, &info_val);
+			chg_info.usb_c= info_val.intval;
+
+			power_supply_get_property(chg->usb_psy, POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED, &info_val);
+			chg_info.icl_settled= info_val.intval;
+
+			power_supply_get_property(chg->usb_psy, POWER_SUPPLY_PROP_REAL_TYPE, &info_val);
+			chg_info.chg_type= info_val.intval;
+
+		}
+	smblib_err(chg,"cap=%d, vbat=%d, batt_current=%d, bat_temp = %d,  status=%d,Vbus=%d,usb_cur=%d,ICL_settled=%d,chg_type=%d\n",
+		chg_info.cap,chg_info.vbat,chg_info.bat_c,chg_info.bat_t,chg_info.sts,chg_info.vbus,chg_info.usb_c,chg_info.icl_settled,chg_info.chg_type);
+}
+#endif
+// Huaqin add for debug by tangqingyong at 2018/9/21 end
+
+void asus_min_monitor_work(struct work_struct *work)
+{
+
+	struct smb_charger *chg = container_of(work, struct smb_charger,
+					asus_min_monitor_work.work);
+
+	printk("enter asus_min_monitor_work\n");
+	if (!chg) {
+		printk("%s: chg is null due to driver probed isn't ready\n", __func__);
+		return;
+	}
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert start
+	if(usb_otg_present){
+		printk("enter asus_min_monitor_work-->  OTG present\n");
+		asus_update_usb_connector_state(chg);
+		last_jeita_time = current_kernel_time();
+		schedule_delayed_work(&chg->asus_min_monitor_work, msecs_to_jiffies(ASUS_MONITOR_CYCLE));
+		schedule_delayed_work(&chg->asus_batt_RTC_work, 0);
+		asus_smblib_relax(chg);
+		return;
+	}
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert end
+
+	if (!asus_get_prop_usb_present(chg)) {
+		smblib_uusb_removal(chg);
+		return;
+	}
+//huaqin added for ZQL1830-199 by tangqingyong demoapp charge at 20180819 start
+	if (demo_app_property_flag)
+		asus_demoapp_rule(chg);
+//huaqin added for ZQL1830-199 by tangqingyong demoapp charge at 20180819 end
+//huaqin added for life span multiplication by tangqingyong  at 20180820 start
+	if(charger_limit_enable_flag){
+		if (asus_get_prop_batt_capacity(chg) >= charger_limit_value) {
+			CHG_DBG("%s: charger limit is enable & over, stop charging\n", __func__);
+			smblib_masked_write(chg, CHARGING_ENABLE_CMD_REG, CHARGING_ENABLE_CMD_BIT, 0);
+		} else {
+			smblib_masked_write(chg, CHARGING_ENABLE_CMD_REG, CHARGING_ENABLE_CMD_BIT, 1);
+		}
+	}
+//huaqin added for life span multiplication by tangqingyong  at 20180820 end
+// Huaqin add for debug by tangqingyong at 2018/9/21 start
+#ifdef UPDATE_CHG_INFO
+	if(*chg->debug_mask & PR_MISC)
+		smblib_update_chg_info(chg);
+#endif
+// Huaqin add for debug by tangqingyong at 2018/9/21 end
+
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert start
+	asus_update_usb_connector_state(chg);
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert end
+
+
+	if (asus_get_prop_usb_present(chg)) {
+		printk("enter asus_min_monitor_work--> asus_get_prop_usb_present\n");
+		last_jeita_time = current_kernel_time();
+		schedule_delayed_work(&chg->asus_min_monitor_work, msecs_to_jiffies(ASUS_MONITOR_CYCLE));
+		schedule_delayed_work(&chg->asus_batt_RTC_work, 0);
+	}
+	printk("end  asus_min_monitor_work\n");
+	asus_smblib_relax(chg);
+}
+//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor end
+
 
 #define typec_rp_med_high(chg, typec_mode)			\
 	((typec_mode == POWER_SUPPLY_TYPEC_SOURCE_MEDIUM	\
@@ -587,21 +828,6 @@ int smblib_set_aicl_cont_threshold(struct smb_chg_param *param,
 /********************
  * HELPER FUNCTIONS *
  ********************/
-
-int smblib_get_prop_from_bms(struct smb_charger *chg,
-				enum power_supply_property psp,
-				union power_supply_propval *val)
-{
-	int rc;
-
-	if (!chg->bms_psy)
-		return -EINVAL;
-
-	rc = power_supply_get_property(chg->bms_psy, psp, val);
-
-	return rc;
-}
-
 int smblib_configure_hvdcp_apsd(struct smb_charger *chg, bool enable)
 {
 	int rc;
@@ -704,10 +930,9 @@ static int smblib_notifier_call(struct notifier_block *nb,
 			chg->bms_psy = psy;
 		if (ev == PSY_EVENT_PROP_CHANGED)
 			schedule_work(&chg->bms_update_work);
+		if (!chg->jeita_configured)
+			schedule_work(&chg->jeita_update_work);
 	}
-
-	if (!chg->jeita_configured)
-		schedule_work(&chg->jeita_update_work);
 
 	if (!chg->pl.psy && !strcmp(psy->desc->name, "parallel")) {
 		chg->pl.psy = psy;
@@ -768,7 +993,9 @@ int smblib_mapping_cc_delta_from_field_value(struct smb_chg_param *param,
 
 static void smblib_uusb_removal(struct smb_charger *chg)
 {
-	int rc;
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
+	int rc,val;
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
 	struct smb_irq_data *data;
 	struct storm_watch *wdata;
 
@@ -793,6 +1020,9 @@ static void smblib_uusb_removal(struct smb_charger *chg)
 	vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true,
 			is_flash_active(chg) ? SDP_CURRENT_UA : SDP_100_MA);
 	vote(chg->usb_icl_votable, SW_QC3_VOTER, false, 0);
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
+	vote(chg->usb_icl_votable, ASUS_CHG_VOTER, false, 0);
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
 
 	/* reconfigure allowed voltage for HVDCP */
 	rc = smblib_set_adapter_allowance(chg,
@@ -800,11 +1030,6 @@ static void smblib_uusb_removal(struct smb_charger *chg)
 	if (rc < 0)
 		smblib_err(chg, "Couldn't set USBIN_ADAPTER_ALLOW_5V_OR_9V_TO_12V rc=%d\n",
 			rc);
-
-	/* reset USBOV votes and cancel work */
-	cancel_delayed_work_sync(&chg->usbov_dbc_work);
-	vote(chg->awake_votable, USBOV_DBC_VOTER, false, 0);
-	chg->dbc_usbov = false;
 
 	chg->voltage_min_uv = MICRO_5V;
 	chg->voltage_max_uv = MICRO_5V;
@@ -829,6 +1054,44 @@ static void smblib_uusb_removal(struct smb_charger *chg)
 	if (rc < 0)
 		smblib_err(chg,
 			"Couldn't un-vote DCP from USB ICL rc=%d\n", rc);
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
+	if (gpio_is_valid(global_gpio->ADC_SW_EN)) {
+		printk("smblib_uusb_removal gpio_is_valid gpio_ADC_SW_EN=%d\n",global_gpio->ADC_SW_EN);
+		val = gpio_get_value(global_gpio->ADC_SW_EN);
+		if(val==1){
+			rc = gpio_direction_output(global_gpio->ADC_SW_EN, 0);
+			if (rc)
+				printk("%s: failed to pull-low ADC_SW_EN\n", __func__);
+			else
+				printk("%s: Pull low ADC_SW_EN\n", __func__);
+		}
+		else
+			printk("%s: get ADC_SW_EN gpio val %d\n", __func__,val);
+	}
+	val = gpio_get_value(global_gpio->ADC_CHG_GPIO);
+	if(val==1){
+		rc = gpio_direction_output(global_gpio->ADC_CHG_GPIO, 0);
+		if (rc)
+			printk("%s: failed to pull-low ADC_CHG_GPIO\n", __func__);
+		else
+			printk("%s: Pull low ADC_CHG_GPIO\n", __func__);
+	}
+	else
+		printk("%s: get ADC_CHG_GPIO gpio val %d\n", __func__,val);
+	cancel_delayed_work(&chg->asus_chg_flow_work);
+	cancel_delayed_work(&chg->asus_adapter_adc_work);
+//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor start
+	cancel_delayed_work(&chg->asus_min_monitor_work);
+	cancel_delayed_work(&chg->asus_batt_RTC_work);
+	alarm_cancel(&bat_alarm);
+	ASUS_ADAPTER_ID = 0;
+	asus_flow_processing = 0;
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert start
+	need_replugin_usb=true;
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert end
+	asus_smblib_relax(chg);
+//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor end
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
 }
 
 void smblib_suspend_on_debug_battery(struct smb_charger *chg)
@@ -836,7 +1099,7 @@ void smblib_suspend_on_debug_battery(struct smb_charger *chg)
 	int rc;
 	union power_supply_propval val;
 
-	rc = smblib_get_prop_from_bms(chg,
+	rc = power_supply_get_property(chg->bms_psy,
 			POWER_SUPPLY_PROP_DEBUG_BATTERY, &val);
 	if (rc < 0) {
 		smblib_err(chg, "Couldn't get debug battery prop rc=%d\n", rc);
@@ -1311,6 +1574,11 @@ int smblib_vbus_regulator_enable(struct regulator_dev *rdev)
 		smblib_err(chg, "Couldn't enable OTG rc=%d\n", rc);
 		return rc;
 	}
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert start
+	usb_otg_present=true;
+	smblib_asus_monitor_start(chg, 1000);
+	asus_smblib_stay_awake(chg);
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert end
 
 	return 0;
 }
@@ -1327,9 +1595,92 @@ int smblib_vbus_regulator_disable(struct regulator_dev *rdev)
 		smblib_err(chg, "Couldn't disable OTG regulator rc=%d\n", rc);
 		return rc;
 	}
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert start
+	usb_otg_present=false;
+	need_replugin_usb=true;
+	cancel_delayed_work(&chg->asus_min_monitor_work);
+	cancel_delayed_work(&chg->asus_batt_RTC_work);
+	alarm_cancel(&bat_alarm);
+	asus_smblib_relax(chg);
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert end
 
 	return 0;
 }
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert start
+static int smblib_get_adc_data(struct smb_charger *chg)
+{
+	int rc = 0;
+	struct qpnp_vadc_result result;
+	int64_t vadc = 0;
+
+
+	chg->vadc_usb_alert = qpnp_get_vadc(chg->dev, "pm-gpio1");
+	if (IS_ERR(chg->vadc_usb_alert)) {
+		printk(" Error get vadc_usb_alert rc = %d \n",rc);
+		rc = PTR_ERR(chg->vadc_usb_alert);
+		if (rc != -EPROBE_DEFER)
+			pr_debug("Couldn't get chg_alert vadc rc = %d\n",rc);
+		return rc;
+	}
+
+	if(chg->vadc_usb_alert){
+		rc = qpnp_vadc_read(chg->vadc_usb_alert, VADC_AMUX1_GPIO_PU2,
+				&result);
+		vadc =  result.physical;
+		printk("qpnp_vadc_read ---:  usb_alert_volta = %lld\n",vadc);
+	}else{
+		printk("NONE vadc_usb_alert \n");
+		return  -1;
+	}
+
+	return vadc;
+
+}
+void asus_update_usb_connector_state(struct smb_charger *chg)
+{
+	int64_t  phy_volta=0;
+	int rc =0;
+
+	phy_volta = smblib_get_adc_data(chg);
+
+	if(phy_volta <=0 )
+		return;
+
+	if(phy_volta  < CHG_ALERT_HOT_NTC_VOLTAFE){
+		if (!usb_otg_present)
+			smblib_set_usb_suspend(chg, true);
+		else{
+				rc = smblib_masked_write(chg, DCDC_CMD_OTG_REG, OTG_EN_BIT, 0);
+				if (rc < 0) {
+					smblib_err(chg, "Couldn't disable OTG rc=%d\n", rc);
+					return ;
+				}
+				smblib_notify_usb_host(chg, false);
+		}
+
+
+		extcon_set_state_sync(chg->extcon, EXTCON_CHG_USB_DCP, true);
+		usb_alert_usb_otg_disable=true;
+		need_replugin_usb=false;
+		printk("USB connector hot, suspend charger and otg \n");
+
+	}else if((phy_volta >= CHG_ALERT_HOT_NTC_VOLTAFE) && (phy_volta <= CHG_ALERT_WARM_NTC_VOLTAGE)){
+		if(usb_alert_usb_otg_disable == true){
+			printk("USB connector former state is hot, now is warm\n");
+		}else
+			printk("USB connector former state is GOOD, now is warm");
+
+	}else if((phy_volta > CHG_ALERT_WARM_NTC_VOLTAGE) && need_replugin_usb){
+		extcon_set_state_sync(chg->extcon, EXTCON_CHG_USB_DCP, false);
+		usb_alert_usb_otg_disable=false;
+		need_replugin_usb=false;
+		smblib_set_usb_suspend(chg, false);
+
+		printk("USB connector temp is GOOD, recover usb and otg \n");
+
+	}
+}
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert end
 
 int smblib_vbus_regulator_is_enabled(struct regulator_dev *rdev)
 {
@@ -1387,10 +1738,20 @@ int smblib_get_prop_batt_capacity(struct smb_charger *chg,
 		return 0;
 	}
 
-	rc = smblib_get_prop_from_bms(chg, POWER_SUPPLY_PROP_CAPACITY, val);
-
+	if (chg->bms_psy)
+		rc = power_supply_get_property(chg->bms_psy,
+				POWER_SUPPLY_PROP_CAPACITY, val);
 	return rc;
 }
+// Huaqin add for ZQL1830-1470 by wenyaqi at 20181023 start
+int smblib_get_prop_charger_id(struct smb_charger *chg,
+                                    union power_supply_propval *val)
+{
+	val->intval = ASUS_ADAPTER_ID;
+	return 0;
+}
+// Huaqin add for ZQL1830-1470 by wenyaqi at 20181023 end
+
 
 int smblib_get_prop_batt_status(struct smb_charger *chg,
 				union power_supply_propval *val)
@@ -1398,32 +1759,7 @@ int smblib_get_prop_batt_status(struct smb_charger *chg,
 	union power_supply_propval pval = {0, };
 	bool usb_online, dc_online;
 	u8 stat;
-	int rc, suspend = 0;
-
-	if (chg->dbc_usbov) {
-		rc = smblib_get_prop_usb_present(chg, &pval);
-		if (rc < 0) {
-			smblib_err(chg,
-				"Couldn't get usb present prop rc=%d\n", rc);
-			return rc;
-		}
-
-		rc = smblib_get_usb_suspend(chg, &suspend);
-		if (rc < 0) {
-			smblib_err(chg,
-				"Couldn't get usb suspend rc=%d\n", rc);
-			return rc;
-		}
-
-		/*
-		 * Report charging as long as USBOV is not debounced and
-		 * charging path is un-suspended.
-		 */
-		if (pval.intval && !suspend) {
-			val->intval = POWER_SUPPLY_STATUS_CHARGING;
-			return 0;
-		}
-	}
+	int rc;
 
 	rc = smblib_get_prop_usb_online(chg, &pval);
 	if (rc < 0) {
@@ -1556,8 +1892,7 @@ int smblib_get_prop_batt_health(struct smb_charger *chg,
 		   stat);
 
 	if (stat & CHARGER_ERROR_STATUS_BAT_OV_BIT) {
-		rc = smblib_get_prop_from_bms(chg,
-				POWER_SUPPLY_PROP_VOLTAGE_NOW, &pval);
+		rc = smblib_get_prop_batt_voltage_now(chg, &pval);
 		if (!rc) {
 			/*
 			 * If Vbatt is within 40mV above Vfloat, then don't
@@ -1628,6 +1963,84 @@ int smblib_get_prop_input_current_limited(struct smb_charger *chg,
 	return 0;
 }
 
+int smblib_get_prop_batt_voltage_now(struct smb_charger *chg,
+				     union power_supply_propval *val)
+{
+	int rc;
+
+	if (!chg->bms_psy)
+		return -EINVAL;
+
+	rc = power_supply_get_property(chg->bms_psy,
+				       POWER_SUPPLY_PROP_VOLTAGE_NOW, val);
+	return rc;
+}
+
+int smblib_get_prop_batt_current_now(struct smb_charger *chg,
+				     union power_supply_propval *val)
+{
+	int rc;
+
+	if (!chg->bms_psy)
+		return -EINVAL;
+
+	rc = power_supply_get_property(chg->bms_psy,
+				       POWER_SUPPLY_PROP_CURRENT_NOW, val);
+	return rc;
+}
+
+int smblib_get_prop_batt_iterm(struct smb_charger *chg,
+		union power_supply_propval *val)
+{
+	int rc, temp;
+	u8 stat, buf[2];
+
+	/*
+	 * Currently, only ADC comparator-based termination is supported,
+	 * hence read only the threshold corresponding to ADC source.
+	 * Proceed only if CHGR_ITERM_USE_ANALOG_BIT is 0.
+	 */
+	rc = smblib_read(chg, CHGR_ENG_CHARGING_CFG_REG, &stat);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't read CHGR_ENG_CHARGING_CFG_REG rc=%d\n",
+				rc);
+		return rc;
+	}
+
+	if (stat & CHGR_ITERM_USE_ANALOG_BIT) {
+		val->intval = -EINVAL;
+		return 0;
+	}
+
+	rc = smblib_batch_read(chg, CHGR_ADC_ITERM_UP_THD_MSB_REG, buf, 2);
+
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't read CHGR_ADC_ITERM_UP_THD_MSB_REG rc=%d\n",
+				rc);
+		return rc;
+	}
+
+	temp = buf[1] | (buf[0] << 8);
+	temp = sign_extend32(temp, 15);
+	temp = DIV_ROUND_CLOSEST(temp * 10000, ADC_CHG_TERM_MASK);
+	val->intval = temp;
+
+	return rc;
+}
+
+int smblib_get_prop_batt_temp(struct smb_charger *chg,
+			      union power_supply_propval *val)
+{
+	int rc;
+
+	if (!chg->bms_psy)
+		return -EINVAL;
+
+	rc = power_supply_get_property(chg->bms_psy,
+				       POWER_SUPPLY_PROP_TEMP, val);
+	return rc;
+}
+
 int smblib_get_prop_batt_charge_done(struct smb_charger *chg,
 					union power_supply_propval *val)
 {
@@ -1644,6 +2057,43 @@ int smblib_get_prop_batt_charge_done(struct smb_charger *chg,
 	stat = stat & BATTERY_CHARGER_STATUS_MASK;
 	val->intval = (stat == TERMINATE_CHARGE);
 	return 0;
+}
+
+int smblib_get_prop_batt_charge_counter(struct smb_charger *chg,
+				     union power_supply_propval *val)
+{
+	int rc;
+
+	if (!chg->bms_psy)
+		return -EINVAL;
+
+	rc = power_supply_get_property(chg->bms_psy,
+				       POWER_SUPPLY_PROP_CHARGE_COUNTER, val);
+	return rc;
+}
+//huaqin add by tangqingyong at 20180730 for ZQL1830-199 start
+int asus_get_prop_batt_capacity(struct smb_charger *chg)
+{
+	union power_supply_propval capacity_val = {0, };
+	int rc;
+
+	rc = smblib_get_prop_batt_capacity(chg, &capacity_val);
+
+	return capacity_val.intval;
+}
+//huaqin add by tangqingyong at 20180730 for ZQL1830-199 end
+
+int smblib_get_prop_batt_cycle_count(struct smb_charger *chg,
+				     union power_supply_propval *val)
+{
+	int rc;
+
+	if (!chg->bms_psy)
+		return -EINVAL;
+
+	rc = power_supply_get_property(chg->bms_psy,
+				       POWER_SUPPLY_PROP_CYCLE_COUNT, val);
+	return rc;
 }
 
 /***********************
@@ -1669,6 +2119,14 @@ int smblib_set_prop_input_suspend(struct smb_charger *chg,
 			(bool)val->intval ? "suspend" : "resume", rc);
 		return rc;
 	}
+//huaqin added by tangqingyong for 1256519 switch torch mode dynamically according to input suspend mode start
+	if (chg->smb_version == PMI632_SUBTYPE){
+		if((bool)val->intval)
+			schgm_flash_torch_priority(chg, TORCH_BOOST_MODE);
+		else
+			schgm_flash_torch_priority(chg, TORCH_BUCK_MODE);
+	}
+//huaqin added by tangqingyong for 1256519 switch torch mode dynamically according to input suspend mode end
 
 	power_supply_changed(chg->batt_psy);
 	return rc;
@@ -1711,6 +2169,9 @@ int smblib_set_prop_system_temp_level(struct smb_charger *chg,
 		return -EINVAL;
 
 	chg->system_temp_level = val->intval;
+	/* disable parallel charge in case of system temp level */
+	vote(chg->pl_disable_votable, THERMAL_DAEMON_VOTER,
+			chg->system_temp_level ? true : false, 0);
 
 	if (chg->system_temp_level == chg->thermal_levels)
 		return vote(chg->chg_disable_votable,
@@ -2002,33 +2463,12 @@ int smblib_get_prop_usb_online(struct smb_charger *chg,
 
 	val->intval = (stat & USE_USBIN_BIT) &&
 		      (stat & VALID_INPUT_POWER_SOURCE_STS_BIT);
+
 	return rc;
 }
 
 int smblib_get_prop_usb_voltage_max(struct smb_charger *chg,
 				    union power_supply_propval *val)
-{
-	switch (chg->real_charger_type) {
-	case POWER_SUPPLY_TYPE_USB_HVDCP:
-	case POWER_SUPPLY_TYPE_USB_HVDCP_3:
-		if (chg->smb_version == PMI632_SUBTYPE)
-			val->intval = MICRO_9V;
-		else
-			val->intval = MICRO_12V;
-		break;
-	case POWER_SUPPLY_TYPE_USB_PD:
-		val->intval = chg->voltage_max_uv;
-		break;
-	default:
-		val->intval = MICRO_5V;
-		break;
-	}
-
-	return 0;
-}
-
-int smblib_get_prop_usb_voltage_max_design(struct smb_charger *chg,
-					union power_supply_propval *val)
 {
 	switch (chg->real_charger_type) {
 	case POWER_SUPPLY_TYPE_USB_HVDCP:
@@ -2950,7 +3390,29 @@ static void smblib_micro_usb_plugin(struct smb_charger *chg, bool vbus_rising)
 		smblib_update_usb_type(chg);
 		smblib_notify_device_mode(chg, false);
 		smblib_uusb_removal(chg);
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
+		asus_flow_processing = 0;
+	}else{
+		printk("enter smblib_micro_usb_plugin vbus_rising=1\n");
+		if (!asus_flow_processing) {
+			asus_flow_processing = 1;
+			printk("will enter asus_chg_flow_work\n");
+//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor start
+			asus_smblib_stay_awake(chg);
+//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor end
+		#if HQ_FACTORY_BUILD
+		#else
+		vote(chg->usb_icl_votable, ASUS_CHG_VOTER, true,
+						ICL_1000mA);
+
+		#endif
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert start
+			asus_update_usb_connector_state(chg);
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert end
+			schedule_delayed_work(&chg->asus_chg_flow_work, msecs_to_jiffies(12000));
+		}
 	}
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
 }
 
 void smblib_usb_plugin_hard_reset_locked(struct smb_charger *chg)
@@ -3044,10 +3506,14 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 					&chg->param.aicl_cont_threshold,
 					chg->aicl_cont_threshold_mv);
 			chg->aicl_max_reached = false;
-
+//huaqin added by tangqingyong for 1256519 switch torch mode dynamically according to input suspend mode start
+//huaqin add by tangqingyong for Torch draw from battery at 20181019 start
 			if (chg->smb_version == PMI632_SUBTYPE)
 				schgm_flash_torch_priority(chg,
 						TORCH_BUCK_MODE);
+//huaqin add by tangqingyong for Torch draw from battery at 20181019 end
+//huaqin added by tangqingyong for 1256519 switch torch mode dynamically according to input suspend mode end
+
 
 			data = chg->irq_info[USBIN_UV_IRQ].irq_data;
 			if (data) {
@@ -3473,11 +3939,6 @@ static void typec_src_removal(struct smb_charger *chg)
 	vote(chg->pl_enable_votable_indirect, USBIN_V_VOTER, false, 0);
 	vote(chg->awake_votable, PL_DELAY_VOTER, false, 0);
 
-	/* reset USBOV votes and cancel work */
-	cancel_delayed_work_sync(&chg->usbov_dbc_work);
-	vote(chg->awake_votable, USBOV_DBC_VOTER, false, 0);
-	chg->dbc_usbov = false;
-
 	chg->pulse_cnt = 0;
 	chg->usb_icl_delta_ua = 0;
 	chg->voltage_min_uv = MICRO_5V;
@@ -3672,6 +4133,201 @@ irqreturn_t high_duty_cycle_irq_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
+void asus_chg_flow_work(struct work_struct *work)
+{
+	const struct apsd_result *apsd_result;
+	int rc;
+	struct smb_charger *chg = container_of(work, struct smb_charger,
+					asus_chg_flow_work.work);
+
+
+	printk("enter asus_chg_flow_work\n");
+
+	if (!asus_get_prop_usb_present(chg)) {
+		smblib_uusb_removal(chg);
+		return;
+	}
+	apsd_result = smblib_update_usb_type(chg);
+	printk("enter asus_chg_flow_work  apsd_result->pst=%d\n",apsd_result->pst);
+	if(apsd_result->pst == POWER_SUPPLY_TYPE_USB){
+		power_supply_changed(chg->usb_psy);
+	}
+//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor start
+	if (chg->pd_active) {
+		printk("%s: PD_active\n", __func__);
+		smblib_asus_monitor_start(chg, 0);
+		return;
+	}
+//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor end
+
+	switch (apsd_result->bit) {
+	case SDP_CHARGER_BIT:
+	case FLOAT_CHARGER_BIT:
+		printk("asus_chg_flow_work enter FLOAT_CHARGER_BIT\n");
+		vote(chg->usb_icl_votable, ASUS_CHG_VOTER, true,
+						ICL_500mA);
+//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor start
+		smblib_asus_monitor_start(chg, 0);
+//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor end
+		break;
+	case CDP_CHARGER_BIT:
+		vote(chg->usb_icl_votable, ASUS_CHG_VOTER, true,
+						ICL_1500mA);
+//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor start
+		smblib_asus_monitor_start(chg, 0);
+//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor end
+		break;
+	case OCP_CHARGER_BIT:
+		vote(chg->usb_icl_votable, ASUS_CHG_VOTER, true,
+						ICL_1000mA);
+//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor start
+		smblib_asus_monitor_start(chg, 0);
+//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor end
+		break;
+	case DCP_CHARGER_BIT | QC_3P0_BIT:
+	case DCP_CHARGER_BIT | QC_2P0_BIT:
+	case DCP_CHARGER_BIT:
+		printk("enter  asus_chg_flow_work  DCP_CHARGER_BIT\n");
+
+		rc = gpio_direction_output(global_gpio->ADC_SW_EN, 1);
+		if (rc) {
+			printk("%s: failed to pull-high ADC_SW_EN-gpios59\n", __func__);
+			break;
+		} else {
+			printk("%s: Pull high USBSW_S\n", __func__);
+		}
+
+		schedule_delayed_work(&chg->asus_adapter_adc_work, msecs_to_jiffies(15000));
+		break;
+	default:
+//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor start
+		 asus_smblib_relax(chg);
+//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor end
+		break;
+	}
+}
+extern int32_t get_ID_vadc_voltage(struct smb_charger *chg);
+static void CHG_TYPE_judge(struct smb_charger *chg)
+{
+	int adc_result;
+	int ret;
+	int MIN_750K, MAX_750K, MIN_200K, MAX_200K;
+
+	MIN_750K = TITAN_750K_MIN;
+	MAX_750K = TITAN_750K_MAX;
+	MIN_200K = TITAN_200K_MIN;
+	MAX_200K = TITAN_200K_MAX;
+
+	adc_result = get_ID_vadc_voltage(chg);
+
+	if (adc_result <= VADC_THD_300MV) {
+		printk("CHG_TYPE_judge adc_result1=%d\n",adc_result);
+		ret = gpio_direction_output(global_gpio->ADC_CHG_GPIO, 1);
+		if (ret) {
+			printk("%s: failed to pull-high ADC_CHG_GPIO\n", __func__);
+		} else {
+			printk("%s: Pull high ADC_CHG_GPIO\n", __func__);
+		}
+		msleep(5);
+
+		adc_result = get_ID_vadc_voltage(chg);
+		printk("CHG_TYPE_judge adc_result2=%d\n",adc_result);
+		if (adc_result >= VADC_THD_1000MV) {
+			ASUS_ADAPTER_ID = OTHERS;
+		} else {
+			if (adc_result >= MIN_750K && adc_result <= MAX_750K)
+				ASUS_ADAPTER_ID = ASUS_750K;
+			else if (adc_result >= MIN_200K && adc_result <= MAX_200K)
+				ASUS_ADAPTER_ID = ASUS_200K;
+			else
+				ASUS_ADAPTER_ID = OTHERS;
+		}
+	} else {
+		if (adc_result >= VADC_THD_900MV)
+			ASUS_ADAPTER_ID = PB;
+		else
+			ASUS_ADAPTER_ID = OTHERS;
+	}
+	printk("CHG_TYPE_judge  ASUS_ADAPTER_ID=%d\n",ASUS_ADAPTER_ID);
+}
+
+void asus_adapter_adc_work(struct work_struct *work)
+{
+	int rc;
+	int usb_max_current = ICL_1000mA;
+
+	struct smb_charger *chg = container_of(work, struct smb_charger,
+					asus_adapter_adc_work.work);
+
+	printk("enter asus_adapter_adc_work\n");
+	if (!asus_get_prop_usb_present(chg)) {
+		smblib_uusb_removal(chg);
+		return;
+	}
+	vote(chg->usb_icl_votable, ASUS_CHG_VOTER, true,
+					50000);
+
+	msleep(5);
+	CHG_TYPE_judge(chg);
+	switch (ASUS_ADAPTER_ID) {
+	case ASUS_750K:
+		usb_max_current = ICL_2000mA;
+		break;
+	case ASUS_200K:
+		usb_max_current = ICL_2000mA;
+		break;
+	case PB:
+		usb_max_current = ICL_2000mA;
+		break;
+	case OTHERS:
+//huaqin added for ZQL1830-361 country code by tangqingyong at 20180820 start
+//huaqin added for ZQL1830-1602 country code by tangqingyong at 20181101 start
+		if(country_code == COUNTRY_BR || country_code == COUNTRY_IN)
+		{
+			usb_max_current = ICL_2000mA;
+			printk("country  BR or IN \n");
+		}
+		else
+		{
+			printk("ASUS_ADAPTER_ID  OTHERS \n");
+			usb_max_current = ICL_1000mA;
+		}
+//huaqin added for ZQL1830-1602 country code by tangqingyong at 20181101 end
+//huaqin added for ZQL1830-361 country code by tangqingyong at 20180820 end
+		break;
+	case ADC_NOT_READY:
+		usb_max_current = ICL_1000mA;
+		break;
+	}
+
+	rc = gpio_direction_output(global_gpio->ADC_CHG_GPIO, 0);
+	if (rc)
+		printk("%s: failed to pull-low ADC_CHG_GPIO\n", __func__);
+	else
+		printk("%s: Pull low ADC_CHG_GPIO\n", __func__);
+	rc = gpio_direction_output(global_gpio->ADC_SW_EN, 0);
+	if (rc)
+		printk("%s: failed to pull-low ADC_SW_EN\n", __func__);
+	else
+		printk("%s: Pull low ADC_SW_EN\n", __func__);
+
+
+	printk("%s: ASUS_ADAPTER_ID = %s, setting mA = 0x%x\n", __func__, asus_id[ASUS_ADAPTER_ID], usb_max_current);
+#if HQ_FACTORY_BUILD
+	vote(chg->usb_icl_votable, ASUS_CHG_VOTER, true,
+					ICL_2000mA);
+#else
+	vote(chg->usb_icl_votable, ASUS_CHG_VOTER, true,
+					usb_max_current);
+#endif
+//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor start
+	smblib_asus_monitor_start(chg, 0);
+//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor end
+
+}
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
+
 static void smblib_bb_removal_work(struct work_struct *work)
 {
 	struct smb_charger *chg = container_of(work, struct smb_charger,
@@ -3756,51 +4412,6 @@ irqreturn_t wdog_bark_irq_handler(int irq, void *data)
 	if (chg->step_chg_enabled || chg->sw_jeita_enabled)
 		power_supply_changed(chg->batt_psy);
 
-	return IRQ_HANDLED;
-}
-
-static void smblib_usbov_dbc_work(struct work_struct *work)
-{
-	struct smb_charger *chg = container_of(work, struct smb_charger,
-						usbov_dbc_work.work);
-
-	smblib_dbg(chg, PR_MISC, "Resetting USBOV debounce\n");
-	chg->dbc_usbov = false;
-	vote(chg->awake_votable, USBOV_DBC_VOTER, false, 0);
-}
-
-irqreturn_t usbin_ov_irq_handler(int irq, void *data)
-{
-	struct smb_irq_data *irq_data = data;
-	struct smb_charger *chg = irq_data->parent_data;
-	u8 stat;
-	int rc;
-
-	if (!(chg->wa_flags & USBIN_OV_WA))
-		goto out;
-
-	rc = smblib_read(chg, USBIN_BASE + INT_RT_STS_OFFSET, &stat);
-	if (rc < 0) {
-		smblib_err(chg, "Couldn't read USB_INT_RT_STS rc=%d\n", rc);
-		goto out;
-	}
-	smblib_dbg(chg, PR_INTERRUPT, "IRQ: %s stat=%x\n", irq_data->name,
-				!!stat);
-
-	if (stat & USBIN_OV_RT_STS_BIT) {
-		chg->dbc_usbov = true;
-		vote(chg->awake_votable, USBOV_DBC_VOTER, true, 0);
-		schedule_delayed_work(&chg->usbov_dbc_work,
-				msecs_to_jiffies(1000));
-	} else {
-		cancel_delayed_work_sync(&chg->usbov_dbc_work);
-		chg->dbc_usbov = false;
-		vote(chg->awake_votable, USBOV_DBC_VOTER, true, 0);
-	}
-
-out:
-	smblib_dbg(chg, PR_MISC, "USBOV debounce status %d\n",
-				chg->dbc_usbov);
 	return IRQ_HANDLED;
 }
 
@@ -4110,20 +4721,12 @@ static void jeita_update_work(struct work_struct *work)
 		goto out;
 	}
 
-	/* if BMS is not ready, defer the work */
-	if (!chg->bms_psy)
-		return;
-
-	rc = smblib_get_prop_from_bms(chg,
+	rc = power_supply_get_property(chg->bms_psy,
 			POWER_SUPPLY_PROP_RESISTANCE_ID, &val);
 	if (rc < 0) {
 		smblib_err(chg, "Failed to get batt-id rc=%d\n", rc);
 		goto out;
 	}
-
-	/* if BMS hasn't read out the batt_id yet, defer the work */
-	if (val.intval <= 0)
-		return;
 
 	pnode = of_batterydata_get_best_profile(batt_node,
 					val.intval / 1000, NULL);
@@ -4268,7 +4871,15 @@ int smblib_init(struct smb_charger *chg)
 	INIT_DELAYED_WORK(&chg->pl_enable_work, smblib_pl_enable_work);
 	INIT_DELAYED_WORK(&chg->uusb_otg_work, smblib_uusb_otg_work);
 	INIT_DELAYED_WORK(&chg->bb_removal_work, smblib_bb_removal_work);
-	INIT_DELAYED_WORK(&chg->usbov_dbc_work, smblib_usbov_dbc_work);
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
+	INIT_DELAYED_WORK(&chg->asus_chg_flow_work, asus_chg_flow_work);
+	INIT_DELAYED_WORK(&chg->asus_adapter_adc_work, asus_adapter_adc_work);
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
+//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor start
+	INIT_DELAYED_WORK(&chg->asus_min_monitor_work, asus_min_monitor_work);
+	INIT_DELAYED_WORK(&chg->asus_batt_RTC_work, asus_batt_RTC_work);
+	alarm_init(&bat_alarm, ALARM_REALTIME, batAlarm_handler);
+//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor end
 
 	if (chg->moisture_protection_enabled &&
 				(chg->wa_flags & MOISTURE_PROTECTION_WA)) {
@@ -4358,7 +4969,6 @@ int smblib_deinit(struct smb_charger *chg)
 		cancel_delayed_work_sync(&chg->pl_enable_work);
 		cancel_delayed_work_sync(&chg->uusb_otg_work);
 		cancel_delayed_work_sync(&chg->bb_removal_work);
-		cancel_delayed_work_sync(&chg->usbov_dbc_work);
 		power_supply_unreg_notifier(&chg->nb);
 		smblib_destroy_votables(chg);
 		qcom_step_chg_deinit();
