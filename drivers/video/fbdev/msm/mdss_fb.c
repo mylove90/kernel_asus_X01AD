@@ -968,13 +968,17 @@ static void mdss_fb_remove_sysfs(struct msm_fb_data_type *mfd)
 {
 	sysfs_remove_group(&mfd->fbi->dev->kobj, &mdss_fb_attr_group);
 }
-
+/* Huaqin modify for time sequence by qimaokang at 2018/08/14 start*/
+bool shutdown_flag = 0;
+/* Huaqin modify for time sequence by qimaokang at 2018/08/14 end*/
 static void mdss_fb_shutdown(struct platform_device *pdev)
 {
 	struct msm_fb_data_type *mfd = platform_get_drvdata(pdev);
 
 	mfd->shutdown_pending = true;
-
+/* Huaqin modify for time sequence by qimaokang at 2018/08/14 start*/
+	shutdown_flag = 1;
+/* Huaqin modify for time sequence by qimaokang at 2018/08/14 end*/
 	/* wake up threads waiting on idle or kickoff queues */
 	wake_up_all(&mfd->idle_wait_q);
 	wake_up_all(&mfd->kickoff_wait_q);

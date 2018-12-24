@@ -789,8 +789,10 @@
 		pinctrl-names = "i2c_active", "i2c_sleep";
 		pinctrl-0 = <&i2c_3_active>;
 		pinctrl-1 = <&i2c_3_sleep>;
-		qcom,noise-rjct-scl = <0>;
-		qcom,noise-rjct-sda = <0>;
+		/* Huaqin modify for TP update fail by liufurong at 20181017 start */
+		qcom,noise-rjct-scl = <3>;//0
+		qcom,noise-rjct-sda = <3>;//0
+		/* Huaqin modify for TP update fail by liufurong at 20181017 end */
 		qcom,master-id = <86>;
 		dmas = <&dma_blsp1 8 64 0x20000020 0x20>,
 			<&dma_blsp1 9 32 0x20000020 0x20>;
