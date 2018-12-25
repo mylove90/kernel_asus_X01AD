@@ -1046,12 +1046,6 @@
 		};
 	};
 };
-//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
-&pmi632_charger {
-       ADC-SW-EN-GPIO16 = <&tlmm 16 0>;
-       ADC-CHG-GPIO17 = <&tlmm 17 0>;
-};
-//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
 
 &pm8953_vadc {
 	pinctrl-0 = <&pa_therm1_default>;
