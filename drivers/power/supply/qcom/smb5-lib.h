@@ -20,56 +20,6 @@
 #include <linux/extcon.h>
 #include <linux/alarmtimer.h>
 #include "storm-watch.h"
-//huaqin add by tangqingyong at 20180730 for ZQL1830-199 start
-#include <linux/uaccess.h>
-#include <linux/proc_fs.h>
-#include <asm-generic/errno-base.h>
-//huaqin add by tangqingyong at 20180730 for ZQL1830-199 end
-//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
-#include <linux/of_gpio.h>
-//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor start
-#include "fg-core.h"
-#include <linux/gpio.h>
-#include <linux/alarmtimer.h>
-#include <linux/wakelock.h>
-#include <linux/unistd.h>
-#include <linux/fcntl.h>
-#include <linux/slab.h>
-#include <linux/uaccess.h>
-//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor end
-//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert start
-#include <linux/extcon.h>
-#include <linux/qpnp/qpnp-adc.h>
-//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert end
-//huaqin added for ZQL1830-199 by tangqingyong demoapp charge at 20180819 start
-#include <linux/fs.h>
-//huaqin added for ZQL1830-199 by tangqingyong demoapp charge at 20180819 end
-
-
-#define CHARGER_TAG "[BAT][CHG]"
-#define ERROR_TAG "[ERR]"
-
-#define printk(...)  printk(KERN_ERR CHARGER_TAG __VA_ARGS__)
-#define CHG_DBG(...)  printk(KERN_ERR CHARGER_TAG __VA_ARGS__)
-#define CHG_DBG_E(...)  printk(KERN_ERR CHARGER_TAG ERROR_TAG __VA_ARGS__)
-//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
-// Huaqin add for debug by tangqingyong at 2018/9/21 start
-#define UPDATE_CHG_INFO
-
-#ifdef UPDATE_CHG_INFO
-struct smbchg_info{
-	int	cap;
-	int	vbus;
-	int	vbat;
-	int	usb_c;
-	int	bat_c;
-	int	bat_t;
-	int	icl_settled;
-	int	sts;
-	int	chg_type;
-};
-#endif
-// Huaqin add for debug by tangqingyong at 2018/9/21 end
 
 enum print_reason {
 	PR_INTERRUPT	= BIT(0),
@@ -119,10 +69,8 @@ enum print_reason {
 #define HW_LIMIT_VOTER			"HW_LIMIT_VOTER"
 #define FORCE_RECHARGE_VOTER		"FORCE_RECHARGE_VOTER"
 #define AICL_THRESHOLD_VOTER		"AICL_THRESHOLD_VOTER"
-//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
-#define ASUS_CHG_VOTER			"ASUS_CHG_VOTER"
-//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
 #define MOISTURE_VOTER			"MOISTURE_VOTER"
+#define USBOV_DBC_VOTER			"USBOV_DBC_VOTER"
 
 #define BOOST_BACK_STORM_COUNT	3
 #define WEAK_CHG_STORM_COUNT	8
@@ -132,39 +80,11 @@ enum print_reason {
 #define SDP_100_MA			100000
 #define SDP_CURRENT_UA			500000
 #define CDP_CURRENT_UA			1500000
-//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
-#define DCP_CURRENT_UA			2000000
-//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
+#define DCP_CURRENT_UA			1500000
 #define HVDCP_CURRENT_UA		3000000
 #define TYPEC_DEFAULT_CURRENT_UA	900000
 #define TYPEC_MEDIUM_CURRENT_UA		1500000
 #define TYPEC_HIGH_CURRENT_UA		3000000
-//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
-#define ICL_475mA	 475000
-#define ICL_500mA	 500000
-#define ICL_950mA	 950000
-#define ICL_1000mA	1000000
-#define ICL_1425mA	1425000
-#define ICL_1500mA	1500000
-#define ICL_1900mA	1900000
-#define ICL_2000mA	2000000
-#define ICL_2850mA	2850000
-#define ICL_3000mA	3000000
-#define ASUS_MONITOR_CYCLE		60000
-#define TITAN_750K_MIN	675
-#define TITAN_750K_MAX	851
-#define TITAN_200K_MIN	306
-#define TITAN_200K_MAX	406
-#define VADC_THD_300MV  300
-#define VADC_THD_900MV  900
-#define VADC_THD_1000MV  1000
-//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
-//huaqin added for ZQL1830-361 country code by tangqingyong at 20180820 start
-#define COUNTRY_BR 1
-#define COUNTRY_IN 1
-#define COUNTRY_OTHER 2
-//huaqin added for ZQL1830-361 country code by tangqingyong at 20180820 end
-#define ADC_CHG_TERM_MASK	32767
 
 enum smb_mode {
 	PARALLEL_MASTER = 0,
@@ -182,6 +102,7 @@ enum {
 	BOOST_BACK_WA			= BIT(0),
 	WEAK_ADAPTER_WA			= BIT(1),
 	MOISTURE_PROTECTION_WA		= BIT(2),
+	USBIN_OV_WA			= BIT(3),
 };
 
 enum {
@@ -290,9 +211,6 @@ struct smb_irq_info {
 static const unsigned int smblib_extcon_cable[] = {
 	EXTCON_USB,
 	EXTCON_USB_HOST,
-//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert start
-	EXTCON_CHG_USB_DCP,
-//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert end
 	EXTCON_NONE,
 };
 
@@ -384,9 +302,6 @@ struct smb_charger {
 	int			*weak_chg_icl_ua;
 	struct qpnp_vadc_chip	*vadc_dev;
 	bool			pd_not_supported;
-//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert start
-	struct qpnp_vadc_chip	*vadc_usb_alert;
-//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert end
 
 	/* locks */
 	struct mutex		lock;
@@ -435,14 +350,7 @@ struct smb_charger {
 	struct delayed_work	pl_enable_work;
 	struct delayed_work	uusb_otg_work;
 	struct delayed_work	bb_removal_work;
-//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
-	struct delayed_work	asus_chg_flow_work;
-	struct delayed_work	asus_adapter_adc_work;
-//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
-//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor start
-	struct delayed_work asus_min_monitor_work;
-	struct delayed_work asus_batt_RTC_work;
-//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor end
+	struct delayed_work	usbov_dbc_work;
 
 	/* alarm */
 	struct alarm		moisture_protection_alarm;
@@ -501,6 +409,7 @@ struct smb_charger {
 	/* workaround flag */
 	u32			wa_flags;
 	int			boost_current_ua;
+	bool			dbc_usbov;
 
 	/* extcon for VBUS / ID notification to USB for uUSB */
 	struct extcon_dev	*extcon;
@@ -521,13 +430,6 @@ struct smb_charger {
 	bool			flash_init_done;
 	bool			flash_active;
 };
-//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
-struct gpio_control {
-	u32 ADC_SW_EN;
-	u32 ADC_CHG_GPIO;
-};
-//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
-
 
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val);
 int smblib_masked_write(struct smb_charger *chg, u16 addr, u8 mask, u8 val);
@@ -580,6 +482,7 @@ irqreturn_t high_duty_cycle_irq_handler(int irq, void *data);
 irqreturn_t switcher_power_ok_irq_handler(int irq, void *data);
 irqreturn_t wdog_bark_irq_handler(int irq, void *data);
 irqreturn_t typec_or_rid_detection_change_irq_handler(int irq, void *data);
+irqreturn_t usbin_ov_irq_handler(int irq, void *data);
 
 int smblib_get_prop_input_suspend(struct smb_charger *chg,
 				union power_supply_propval *val);
@@ -600,22 +503,6 @@ int smblib_get_prop_system_temp_level(struct smb_charger *chg,
 int smblib_get_prop_system_temp_level_max(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_input_current_limited(struct smb_charger *chg,
-				union power_supply_propval *val);
-int smblib_get_prop_batt_voltage_now(struct smb_charger *chg,
-				union power_supply_propval *val);
-int smblib_get_prop_batt_current_now(struct smb_charger *chg,
-				union power_supply_propval *val);
-int smblib_get_prop_batt_iterm(struct smb_charger *chg,
-				union power_supply_propval *val);
-int smblib_get_prop_batt_temp(struct smb_charger *chg,
-				union power_supply_propval *val);
-int smblib_get_prop_batt_charge_counter(struct smb_charger *chg,
-				union power_supply_propval *val);
-// Huaqin add for ZQL1830-1470 by wenyaqi at 20181023 start
-int smblib_get_prop_charger_id(struct smb_charger *chg,
-				union power_supply_propval *val);
-// Huaqin add for ZQL1830-1470 by wenyaqi at 20181023 end
-int smblib_get_prop_batt_cycle_count(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_set_prop_input_suspend(struct smb_charger *chg,
 				const union power_supply_propval *val);
@@ -643,6 +530,8 @@ int smblib_get_prop_usb_online(struct smb_charger *chg,
 int smblib_get_prop_usb_suspend(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_usb_voltage_max(struct smb_charger *chg,
+				union power_supply_propval *val);
+int smblib_get_prop_usb_voltage_max_design(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_typec_cc_orientation(struct smb_charger *chg,
 				union power_supply_propval *val);
@@ -688,6 +577,9 @@ int smblib_get_prop_pr_swap_in_progress(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_set_prop_pr_swap_in_progress(struct smb_charger *chg,
 				const union power_supply_propval *val);
+int smblib_get_prop_from_bms(struct smb_charger *chg,
+				enum power_supply_property psp,
+				union power_supply_propval *val);
 int smblib_stat_sw_override_cfg(struct smb_charger *chg, bool override);
 int smblib_configure_wdog(struct smb_charger *chg, bool enable);
 int smblib_force_vbus_voltage(struct smb_charger *chg, u8 val);
