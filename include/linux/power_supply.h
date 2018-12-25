@@ -302,9 +302,6 @@ enum power_supply_property {
 	POWER_SUPPLY_PROP_ESR_NOMINAL,
 	POWER_SUPPLY_PROP_SOH,
 	POWER_SUPPLY_PROP_QC_OPTI_DISABLE,
-        //Huaqin add for ZQL1830-1470 by wenyaqi at 20181023 start
-        POWER_SUPPLY_PROP_CHARGER_ID,
-        //Huaqin add for ZQL1830-1470 by wenyaqi at 20181023 end
 	POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE,
 	/* Local extensions of type int64_t */
 	POWER_SUPPLY_PROP_CHARGE_COUNTER_EXT,
