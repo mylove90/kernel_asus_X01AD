@@ -36,15 +36,29 @@
 /{
 	mtp_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <15>;
-		//Huaqin added by tangqingyong for battrydata at 20180823 start
-		#include "Huaqin_QL1830scud_4000mAh_averaged_MasterSlave_Sept25th2018_PMI632.dtsi"
-		//Huaqin added by tangqingyong for battrydata at 20180823 end
-		//Huaqin added by wenyaqi for batterydata_second at 20181016 start
-		#include "Huaqin_QL1830_Second_4000mAh_averaged_MasterSlave_Oct15th2018_PMI632.dtsi"
-		//Huaqin added by wenyaqi for batterydata_second at 20181016 end
-		//Huaqin added by wenyaqi for batterydata_third at 20181105 start
-		#include "Huaqin_QL1830_Third_4020mAH_averaged_MasterSlave_Nov5th2018_PMi632.dtsi"
-		//Huaqin added by wenyaqi for batterydata_third at 20181105 end
+		#include "qg-batterydata-ascent-3450mah.dtsi"
+		#include "qg-batterydata-mlp356477-2800mah.dtsi"
+	};
+};
+
+&pmi632_vadc {
+	pinctrl-names = "default";
+	pinctrl-0 = <&quiet_therm_default &smb_therm_default>;
+};
+
+&pmi632_gpios {
+	quiet_therm {
+		quiet_therm_default: quiet_therm_default {
+			pins = "gpio3";
+			bias-high-impedance;
+		};
+	};
+
+	smb_therm {
+		smb_therm_default: smb_therm_default {
+			pins = "gpio4";
+			bias-high-impedance;
+		};
 	};
 };
 
@@ -216,8 +230,7 @@
 				cooling-device = <&CPU3 (THERMAL_MAX_LIMIT - 4)
 						(THERMAL_MAX_LIMIT - 4)>;
 			};
-	//Huaqin add by tangqingyong for modify BCL control at 20181102 start
-		/*	soc_map4 {
+			soc_map4 {
 				trip = <&pmi632_low_soc>;
 				cooling-device =
 					<&CPU4 THERMAL_MAX_LIMIT
@@ -228,8 +241,7 @@
 				cooling-device =
 					<&CPU5 THERMAL_MAX_LIMIT
 						THERMAL_MAX_LIMIT>;
-			};*/
-	//Huaqin add by tangqingyong for modify BCL control at 20181102 end
+			};
 			soc_map6 {
 				trip = <&pmi632_low_soc>;
 				cooling-device =

@@ -327,14 +327,19 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(batt_profile_version),
 	POWER_SUPPLY_ATTR(batt_full_current),
 	POWER_SUPPLY_ATTR(recharge_soc),
+	POWER_SUPPLY_ATTR(toggle_stat),
+	POWER_SUPPLY_ATTR(allow_hvdcp3),
 	POWER_SUPPLY_ATTR(hvdcp_opti_allowed),
+	POWER_SUPPLY_ATTR(max_pulse_allowed),
+	POWER_SUPPLY_ATTR(ignore_false_negative_isense),
+	POWER_SUPPLY_ATTR(battery_info),
+	POWER_SUPPLY_ATTR(battery_info_id),
+	POWER_SUPPLY_ATTR(enable_jeita_detection),
 	POWER_SUPPLY_ATTR(esr_actual),
 	POWER_SUPPLY_ATTR(esr_nominal),
 	POWER_SUPPLY_ATTR(soh),
 	POWER_SUPPLY_ATTR(qc_opti_disable),
-	//Huaqin add for ZQL1830-1470 by wenyaqi at 20181023 start
-	POWER_SUPPLY_ATTR(charger_id),
-	//Huaqin add for ZQL1830-1470 by wenyaqi at 20181023 end
+	POWER_SUPPLY_ATTR(fcc_stepper_enable),
 	/* Local extensions of type int64_t */
 	POWER_SUPPLY_ATTR(charge_counter_ext),
 	/* Properties of type `const char *' */
