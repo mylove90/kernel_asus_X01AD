@@ -1156,6 +1156,18 @@
 		};
 	};
 };
+
+/* Huaqin add for zhengwu start */
+&i2c_5 {
+	status = "okay";
+	tfa98xx@34 {
+		compatible = "nxp,tfa98xx";
+		reg = <0x34>;
+		reset-gpio =<&tlmm 94 0>;
+	};
+};
+/* Huaqin add for zhengwu end */
+
 /* huaqin add for bring up ili9881h by liufurong at 20180719 start */
 &i2c_3 {
 	status = "ok";
