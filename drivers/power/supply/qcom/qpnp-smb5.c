@@ -220,6 +220,9 @@ struct smb5 {
 	struct dentry		*dfs_root;
 	struct smb_dt_props	dt;
 };
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
+struct gpio_control *global_gpio;
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
 
 static int __debug_mask;
 module_param_named(
@@ -1793,31 +1796,28 @@ static int smb5_configure_micro_usb(struct smb_charger *chg)
 static int smb5_configure_mitigation(struct smb_charger *chg)
 {
 	int rc;
-	u8 chan = 0, src_cfg = 0;
+	u8 chan = 0;
 
 	if (!chg->hw_die_temp_mitigation && !chg->hw_connector_mitigation)
 		return 0;
-
+//huaqin added by tangqingyong for qcom base version update caused can not charge properly issue(case03607654) at 20180810 start
 	if (chg->hw_die_temp_mitigation) {
-		chan = DIE_TEMP_CHANNEL_EN_BIT;
-		src_cfg = THERMREG_DIE_ADC_SRC_EN_BIT
-			| THERMREG_DIE_CMP_SRC_EN_BIT;
-	}
-
-	if (chg->hw_connector_mitigation) {
-		chan |= CONN_THM_CHANNEL_EN_BIT;
-		src_cfg |= THERMREG_CONNECTOR_ADC_SRC_EN_BIT;
-	}
-
-	rc = smblib_masked_write(chg, MISC_THERMREG_SRC_CFG_REG,
-			THERMREG_SW_ICL_ADJUST_BIT | THERMREG_DIE_ADC_SRC_EN_BIT
-			| THERMREG_DIE_CMP_SRC_EN_BIT
-			| THERMREG_CONNECTOR_ADC_SRC_EN_BIT, src_cfg);
-	if (rc < 0) {
-		dev_err(chg->dev,
+		rc = smblib_write(chg, MISC_THERMREG_SRC_CFG_REG,
+//				THERMREG_CONNECTOR_ADC_SRC_EN_BIT
+				 THERMREG_DIE_ADC_SRC_EN_BIT
+				| THERMREG_DIE_CMP_SRC_EN_BIT);
+//huaqin added by tangqingyong for qcom base version update caused can not charge properly issue(case03607654) at 20180810 end
+		if (rc < 0) {
+			dev_err(chg->dev,
 				"Couldn't configure THERM_SRC reg rc=%d\n", rc);
-		return rc;
-	};
+			return rc;
+		};
+
+		chan = DIE_TEMP_CHANNEL_EN_BIT;
+	}
+
+	if (chg->hw_connector_mitigation)
+		chan |= CONN_THM_CHANNEL_EN_BIT;
 
 	rc = smblib_masked_write(chg, BATIF_ADC_CHANNEL_EN_REG,
 			CONN_THM_CHANNEL_EN_BIT | DIE_TEMP_CHANNEL_EN_BIT,
@@ -2791,15 +2791,43 @@ static int smb5_show_charger_status(struct smb5 *chip)
 	return rc;
 }
 
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
+int32_t get_ID_vadc_voltage(struct smb_charger *chg)
+{
+	struct qpnp_vadc_chip *vadc_dev;
+	struct qpnp_vadc_result adc_result;
+	int32_t adc;
+	vadc_dev = qpnp_get_vadc(chg->dev, "pm-gpio3");
+	if (IS_ERR(vadc_dev)) {
+		printk("%s: qpnp_get_vadc failed\n", __func__);
+		return -1;
+	}else{
+		qpnp_vadc_read(vadc_dev, VADC_AMUX2_GPIO, &adc_result);
+		adc = (int) adc_result.physical;
+		adc = adc / 1000;
+		printk("%s: adc=%d adc_result.physical=%lld adc_result.chan=0x%x\n", __func__, adc,adc_result.physical,adc_result.chan);
+	}
+	return adc;
+}
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
 static int smb5_probe(struct platform_device *pdev)
 {
 	struct smb5 *chip;
 	struct smb_charger *chg;
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
+	struct gpio_control *gpio_ctrl;
 	int rc = 0;
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
 
 	chip = devm_kzalloc(&pdev->dev, sizeof(*chip), GFP_KERNEL);
 	if (!chip)
 		return -ENOMEM;
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
+	gpio_ctrl = devm_kzalloc(&pdev->dev, sizeof(*gpio_ctrl), GFP_KERNEL);
+	printk("ADC_SW_EN=%d,ADC_CHG_GPIO=%d\n",gpio_ctrl->ADC_SW_EN,gpio_ctrl->ADC_CHG_GPIO);
+	if (!gpio_ctrl)
+		return -ENOMEM;
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
 
 	chg = &chip->chg;
 	chg->dev = &pdev->dev;
@@ -2811,7 +2839,38 @@ static int smb5_probe(struct platform_device *pdev)
 	chg->die_health = -EINVAL;
 	chg->otg_present = false;
 	mutex_init(&chg->vadc_lock);
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
+	global_gpio = gpio_ctrl;
+	gpio_ctrl->ADC_SW_EN = of_get_named_gpio(pdev->dev.of_node, "ADC-SW-EN-GPIO16", 0);
+	rc = gpio_request(gpio_ctrl->ADC_SW_EN, "ADC-SW-EN-GPIO16");
+	if (rc)
+		CHG_DBG_E("%s: failed to request ADC-SW-EN-GPIO16\n", __func__);
+	else
+		CHG_DBG("%s: Success to request ADC-SW-EN-GPIO16 %d\n", __func__,(int)gpio_ctrl->ADC_SW_EN);
 
+	if(!rc)
+	{
+		printk("smb2_probe pull down gpio\n");
+		gpio_direction_output(gpio_ctrl->ADC_SW_EN, 0);
+	}
+	rc = gpio_get_value(gpio_ctrl->ADC_SW_EN);
+	pr_info("ADC_SW_EN-GPIO16 init H/L %d\n",rc);
+
+	gpio_ctrl->ADC_CHG_GPIO = of_get_named_gpio(pdev->dev.of_node, "ADC-CHG-GPIO17", 0);
+	rc = gpio_request(gpio_ctrl->ADC_CHG_GPIO, "ADC-CHG-GPIO17");
+	if (rc)
+		CHG_DBG_E("%s: failed to request ADC-CHG-GPIO17\n", __func__);
+	else
+		CHG_DBG("%s: Success to request ADC-CHG-GPIO17 %d\n", __func__,(int)gpio_ctrl->ADC_CHG_GPIO);
+
+	if(!rc)
+	{
+		printk("smb2_probe pull down gpio\n");
+		gpio_direction_output(gpio_ctrl->ADC_CHG_GPIO, 0);
+	}
+	rc = gpio_get_value(gpio_ctrl->ADC_CHG_GPIO);
+	pr_info("ADC-CHG-GPIO17 init H/L %d\n",rc);
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
 	chg->regmap = dev_get_regmap(chg->dev->parent, NULL);
 	if (!chg->regmap) {
 		pr_err("parent regmap is missing\n");

@@ -41,6 +41,27 @@
 			pr_debug("%s: %s: " fmt, chg->name,	\
 				__func__, ##__VA_ARGS__);	\
 	} while (0)
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
+extern struct gpio_control *global_gpio;
+static int ASUS_ADAPTER_ID = 0;
+static bool asus_flow_processing = 0;
+enum ADAPTER_ID {
+	NONE = 0,
+	ASUS_750K,
+	ASUS_200K,
+	PB,
+	OTHERS,
+	ADC_NOT_READY,
+};
+static char *asus_id[] = {
+	"NONE",
+	"ASUS_750K",
+	"ASUS_200K",
+	"PB",
+	"OTHERS",
+	"ADC_NOT_READY"
+};
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
 
 #define typec_rp_med_high(chg, typec_mode)			\
 	((typec_mode == POWER_SUPPLY_TYPEC_SOURCE_MEDIUM	\
@@ -768,7 +789,9 @@ int smblib_mapping_cc_delta_from_field_value(struct smb_chg_param *param,
 
 static void smblib_uusb_removal(struct smb_charger *chg)
 {
-	int rc;
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
+	int rc,val;
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
 	struct smb_irq_data *data;
 	struct storm_watch *wdata;
 
@@ -793,6 +816,9 @@ static void smblib_uusb_removal(struct smb_charger *chg)
 	vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true,
 			is_flash_active(chg) ? SDP_CURRENT_UA : SDP_100_MA);
 	vote(chg->usb_icl_votable, SW_QC3_VOTER, false, 0);
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
+	vote(chg->usb_icl_votable, ASUS_CHG_VOTER, false, 0);
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
 
 	/* reconfigure allowed voltage for HVDCP */
 	rc = smblib_set_adapter_allowance(chg,
@@ -829,6 +855,34 @@ static void smblib_uusb_removal(struct smb_charger *chg)
 	if (rc < 0)
 		smblib_err(chg,
 			"Couldn't un-vote DCP from USB ICL rc=%d\n", rc);
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
+	if (gpio_is_valid(global_gpio->ADC_SW_EN)) {
+		printk("smblib_uusb_removal gpio_is_valid gpio_ADC_SW_EN=%d\n",global_gpio->ADC_SW_EN);
+		val = gpio_get_value(global_gpio->ADC_SW_EN);
+		if(val==1){
+			rc = gpio_direction_output(global_gpio->ADC_SW_EN, 0);
+			if (rc)
+				printk("%s: failed to pull-low ADC_SW_EN\n", __func__);
+			else
+				printk("%s: Pull low ADC_SW_EN\n", __func__);
+		}
+		else
+			printk("%s: get ADC_SW_EN gpio val %d\n", __func__,val);
+	}
+	val = gpio_get_value(global_gpio->ADC_CHG_GPIO);
+	if(val==1){
+		rc = gpio_direction_output(global_gpio->ADC_CHG_GPIO, 0);
+		if (rc)
+			printk("%s: failed to pull-low ADC_CHG_GPIO\n", __func__);
+		else
+			printk("%s: Pull low ADC_CHG_GPIO\n", __func__);
+	}
+	else
+		printk("%s: get ADC_CHG_GPIO gpio val %d\n", __func__,val);
+	cancel_delayed_work(&chg->asus_chg_flow_work);
+	cancel_delayed_work(&chg->asus_adapter_adc_work);
+
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
 }
 
 void smblib_suspend_on_debug_battery(struct smb_charger *chg)
@@ -2950,7 +3004,23 @@ static void smblib_micro_usb_plugin(struct smb_charger *chg, bool vbus_rising)
 		smblib_update_usb_type(chg);
 		smblib_notify_device_mode(chg, false);
 		smblib_uusb_removal(chg);
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
+		asus_flow_processing = 0;
+	}else{
+		printk("enter smblib_micro_usb_plugin vbus_rising=1\n");
+		if (!asus_flow_processing) {
+			asus_flow_processing = 1;
+			printk("will enter asus_chg_flow_work\n");
+		#if HQ_FACTORY_BUILD
+		#else
+		vote(chg->usb_icl_votable, ASUS_CHG_VOTER, true,
+						ICL_1000mA);
+
+		#endif
+			schedule_delayed_work(&chg->asus_chg_flow_work, msecs_to_jiffies(12000));
+		}
 	}
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
 }
 
 void smblib_usb_plugin_hard_reset_locked(struct smb_charger *chg)
@@ -3672,6 +3742,161 @@ irqreturn_t high_duty_cycle_irq_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
+void asus_chg_flow_work(struct work_struct *work)
+{
+	const struct apsd_result *apsd_result;
+	int rc;
+	struct smb_charger *chg = container_of(work, struct smb_charger,
+					asus_chg_flow_work.work);
+
+
+	printk("enter asus_chg_flow_work\n");
+
+
+	apsd_result = smblib_update_usb_type(chg);
+	printk("enter asus_chg_flow_work  apsd_result->pst=%d\n",apsd_result->pst);
+	if(apsd_result->pst == POWER_SUPPLY_TYPE_USB){
+		power_supply_changed(chg->usb_psy);
+	}
+
+	switch (apsd_result->bit) {
+	case SDP_CHARGER_BIT:
+	case FLOAT_CHARGER_BIT:
+		printk("asus_chg_flow_work enter FLOAT_CHARGER_BIT\n");
+		vote(chg->usb_icl_votable, ASUS_CHG_VOTER, true,
+						ICL_500mA);
+		break;
+	case CDP_CHARGER_BIT:
+		vote(chg->usb_icl_votable, ASUS_CHG_VOTER, true,
+						ICL_1500mA);
+		break;
+	case OCP_CHARGER_BIT:
+		vote(chg->usb_icl_votable, ASUS_CHG_VOTER, true,
+						ICL_1000mA);
+		break;
+	case DCP_CHARGER_BIT | QC_3P0_BIT:
+	case DCP_CHARGER_BIT | QC_2P0_BIT:
+	case DCP_CHARGER_BIT:
+		printk("enter  asus_chg_flow_work  DCP_CHARGER_BIT\n");
+
+		rc = gpio_direction_output(global_gpio->ADC_SW_EN, 1);
+		if (rc) {
+			printk("%s: failed to pull-high ADC_SW_EN-gpios59\n", __func__);
+			break;
+		} else {
+			printk("%s: Pull high USBSW_S\n", __func__);
+		}
+
+		schedule_delayed_work(&chg->asus_adapter_adc_work, msecs_to_jiffies(15000));
+		break;
+	default:
+		break;
+	}
+}
+extern int32_t get_ID_vadc_voltage(struct smb_charger *chg);
+static void CHG_TYPE_judge(struct smb_charger *chg)
+{
+	int adc_result;
+	int ret;
+	int MIN_750K, MAX_750K, MIN_200K, MAX_200K;
+
+	MIN_750K = TITAN_750K_MIN;
+	MAX_750K = TITAN_750K_MAX;
+	MIN_200K = TITAN_200K_MIN;
+	MAX_200K = TITAN_200K_MAX;
+
+	adc_result = get_ID_vadc_voltage(chg);
+
+	if (adc_result <= VADC_THD_300MV) {
+		printk("CHG_TYPE_judge adc_result1=%d\n",adc_result);
+		ret = gpio_direction_output(global_gpio->ADC_CHG_GPIO, 1);
+		if (ret) {
+			printk("%s: failed to pull-high ADC_CHG_GPIO\n", __func__);
+		} else {
+			printk("%s: Pull high ADC_CHG_GPIO\n", __func__);
+		}
+		msleep(5);
+
+		adc_result = get_ID_vadc_voltage(chg);
+		printk("CHG_TYPE_judge adc_result2=%d\n",adc_result);
+		if (adc_result >= VADC_THD_1000MV) {
+			ASUS_ADAPTER_ID = OTHERS;
+		} else {
+			if (adc_result >= MIN_750K && adc_result <= MAX_750K)
+				ASUS_ADAPTER_ID = ASUS_750K;
+			else if (adc_result >= MIN_200K && adc_result <= MAX_200K)
+				ASUS_ADAPTER_ID = ASUS_200K;
+			else
+				ASUS_ADAPTER_ID = OTHERS;
+		}
+	} else {
+		if (adc_result >= VADC_THD_900MV)
+			ASUS_ADAPTER_ID = PB;
+		else
+			ASUS_ADAPTER_ID = OTHERS;
+	}
+	printk("CHG_TYPE_judge  ASUS_ADAPTER_ID=%d\n",ASUS_ADAPTER_ID);
+}
+
+void asus_adapter_adc_work(struct work_struct *work)
+{
+	int rc;
+	int usb_max_current = ICL_1000mA;
+
+	struct smb_charger *chg = container_of(work, struct smb_charger,
+					asus_adapter_adc_work.work);
+#if 0
+	printk("enter asus_adapter_adc_work\n");
+	if (!asus_get_prop_usb_present(chg)) {
+		smblib_uusb_removal(chg);
+		return;
+	}
+#endif
+	vote(chg->usb_icl_votable, ASUS_CHG_VOTER, true,
+					50000);
+
+	msleep(5);
+	CHG_TYPE_judge(chg);
+	switch (ASUS_ADAPTER_ID) {
+	case ASUS_750K:
+		usb_max_current = ICL_2000mA;
+		break;
+	case ASUS_200K:
+		usb_max_current = ICL_2000mA;
+		break;
+	case PB:
+		usb_max_current = ICL_2000mA;
+		break;
+	case OTHERS:
+		break;
+	case ADC_NOT_READY:
+		usb_max_current = ICL_1000mA;
+		break;
+	}
+
+	rc = gpio_direction_output(global_gpio->ADC_CHG_GPIO, 0);
+	if (rc)
+		printk("%s: failed to pull-low ADC_CHG_GPIO\n", __func__);
+	else
+		printk("%s: Pull low ADC_CHG_GPIO\n", __func__);
+	rc = gpio_direction_output(global_gpio->ADC_SW_EN, 0);
+	if (rc)
+		printk("%s: failed to pull-low ADC_SW_EN\n", __func__);
+	else
+		printk("%s: Pull low ADC_SW_EN\n", __func__);
+
+
+	printk("%s: ASUS_ADAPTER_ID = %s, setting mA = 0x%x\n", __func__, asus_id[ASUS_ADAPTER_ID], usb_max_current);
+#if HQ_FACTORY_BUILD
+	vote(chg->usb_icl_votable, ASUS_CHG_VOTER, true,
+					ICL_2000mA);
+#else
+	vote(chg->usb_icl_votable, ASUS_CHG_VOTER, true,
+					usb_max_current);
+#endif
+}
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
 static void smblib_bb_removal_work(struct work_struct *work)
 {
 	struct smb_charger *chg = container_of(work, struct smb_charger,
@@ -4268,6 +4493,10 @@ int smblib_init(struct smb_charger *chg)
 	INIT_DELAYED_WORK(&chg->pl_enable_work, smblib_pl_enable_work);
 	INIT_DELAYED_WORK(&chg->uusb_otg_work, smblib_uusb_otg_work);
 	INIT_DELAYED_WORK(&chg->bb_removal_work, smblib_bb_removal_work);
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
+	INIT_DELAYED_WORK(&chg->asus_chg_flow_work, asus_chg_flow_work);
+	INIT_DELAYED_WORK(&chg->asus_adapter_adc_work, asus_adapter_adc_work);
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
 	INIT_DELAYED_WORK(&chg->usbov_dbc_work, smblib_usbov_dbc_work);
 
 	if (chg->moisture_protection_enabled &&

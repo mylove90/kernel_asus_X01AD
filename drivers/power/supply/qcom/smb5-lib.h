@@ -20,6 +20,39 @@
 #include <linux/extcon.h>
 #include <linux/alarmtimer.h>
 #include "storm-watch.h"
+//huaqin add by tangqingyong at 20180730 for ZQL1830-199 start
+#include <linux/uaccess.h>
+#include <linux/proc_fs.h>
+#include <asm-generic/errno-base.h>
+//huaqin add by tangqingyong at 20180730 for ZQL1830-199 end
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
+#include <linux/of_gpio.h>
+//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor start
+#include "fg-core.h"
+#include <linux/gpio.h>
+#include <linux/alarmtimer.h>
+#include <linux/wakelock.h>
+#include <linux/unistd.h>
+#include <linux/fcntl.h>
+#include <linux/slab.h>
+#include <linux/uaccess.h>
+//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor end
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert start
+#include <linux/extcon.h>
+#include <linux/qpnp/qpnp-adc.h>
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert end
+//huaqin added for ZQL1830-199 by tangqingyong demoapp charge at 20180819 start
+#include <linux/fs.h>
+//huaqin added for ZQL1830-199 by tangqingyong demoapp charge at 20180819 end
+
+
+#define CHARGER_TAG "[BAT][CHG]"
+#define ERROR_TAG "[ERR]"
+
+#define printk(...)  printk(KERN_ERR CHARGER_TAG __VA_ARGS__)
+#define CHG_DBG(...)  printk(KERN_ERR CHARGER_TAG __VA_ARGS__)
+#define CHG_DBG_E(...)  printk(KERN_ERR CHARGER_TAG ERROR_TAG __VA_ARGS__)
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
 
 enum print_reason {
 	PR_INTERRUPT	= BIT(0),
@@ -69,6 +102,9 @@ enum print_reason {
 #define HW_LIMIT_VOTER			"HW_LIMIT_VOTER"
 #define FORCE_RECHARGE_VOTER		"FORCE_RECHARGE_VOTER"
 #define AICL_THRESHOLD_VOTER		"AICL_THRESHOLD_VOTER"
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
+#define ASUS_CHG_VOTER			"ASUS_CHG_VOTER"
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
 #define MOISTURE_VOTER			"MOISTURE_VOTER"
 #define USBOV_DBC_VOTER			"USBOV_DBC_VOTER"
 
@@ -80,11 +116,33 @@ enum print_reason {
 #define SDP_100_MA			100000
 #define SDP_CURRENT_UA			500000
 #define CDP_CURRENT_UA			1500000
-#define DCP_CURRENT_UA			1500000
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
+#define DCP_CURRENT_UA			2000000
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
 #define HVDCP_CURRENT_UA		3000000
 #define TYPEC_DEFAULT_CURRENT_UA	900000
 #define TYPEC_MEDIUM_CURRENT_UA		1500000
 #define TYPEC_HIGH_CURRENT_UA		3000000
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
+#define ICL_475mA	 475000
+#define ICL_500mA	 500000
+#define ICL_950mA	 950000
+#define ICL_1000mA	1000000
+#define ICL_1425mA	1425000
+#define ICL_1500mA	1500000
+#define ICL_1900mA	1900000
+#define ICL_2000mA	2000000
+#define ICL_2850mA	2850000
+#define ICL_3000mA	3000000
+#define ASUS_MONITOR_CYCLE		60000
+#define TITAN_750K_MIN	675
+#define TITAN_750K_MAX	851
+#define TITAN_200K_MIN	306
+#define TITAN_200K_MAX	406
+#define VADC_THD_300MV  300
+#define VADC_THD_900MV  900
+#define VADC_THD_1000MV  1000
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
 
 enum smb_mode {
 	PARALLEL_MASTER = 0,
@@ -351,6 +409,10 @@ struct smb_charger {
 	struct delayed_work	uusb_otg_work;
 	struct delayed_work	bb_removal_work;
 	struct delayed_work	usbov_dbc_work;
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
+	struct delayed_work	asus_chg_flow_work;
+	struct delayed_work	asus_adapter_adc_work;
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
 
 	/* alarm */
 	struct alarm		moisture_protection_alarm;
@@ -430,6 +492,13 @@ struct smb_charger {
 	bool			flash_init_done;
 	bool			flash_active;
 };
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
+struct gpio_control {
+	u32 ADC_SW_EN;
+	u32 ADC_CHG_GPIO;
+};
+//huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
+
 
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val);
 int smblib_masked_write(struct smb_charger *chg, u16 addr, u8 mask, u8 val);

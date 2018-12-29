@@ -36,10 +36,18 @@
 /{
 	mtp_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <15>;
-		#include "qg-batterydata-ascent-3450mah.dtsi"
-		#include "qg-batterydata-mlp356477-2800mah.dtsi"
+		//Huaqin added by tangqingyong for battrydata at 20180823 start
+		#include "Huaqin_QL1830scud_4000mAh_averaged_MasterSlave_Sept25th2018_PMI632.dtsi"
+		//Huaqin added by tangqingyong for battrydata at 20180823 end
+		//Huaqin added by wenyaqi for batterydata_second at 20181016 start
+		#include "Huaqin_QL1830_Second_4000mAh_averaged_MasterSlave_Oct15th2018_PMI632.dtsi"
+		//Huaqin added by wenyaqi for batterydata_second at 20181016 end
+		//Huaqin added by wenyaqi for batterydata_third at 20181105 start
+		#include "Huaqin_QL1830_Third_4020mAH_averaged_MasterSlave_Nov5th2018_PMi632.dtsi"
+		//Huaqin added by wenyaqi for batterydata_third at 20181105 end
 	};
 };
+
 
 &pmi632_vadc {
 	pinctrl-names = "default";
