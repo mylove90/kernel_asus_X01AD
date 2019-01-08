@@ -246,7 +246,9 @@ CONFIG_CFG80211_REG_CELLULAR_HINTS=y
 CONFIG_CFG80211_INTERNAL_REGDB=y
 # CONFIG_CFG80211_CRDA_SUPPORT is not set
 CONFIG_RFKILL=y
-CONFIG_NFC_NQ=y
+# Huaqin modify for ZQL1830-395 by zhaojunhai1 at 2018/7/17 start
+#CONFIG_NFC_NQ is not set
+# Huaqin modify for ZQL1830-395 by zhaojunhai1 at 2018/7/17 end
 CONFIG_IPC_ROUTER=y
 CONFIG_IPC_ROUTER_SECURITY=y
 CONFIG_FW_LOADER_USER_HELPER_FALLBACK=y
@@ -330,6 +332,13 @@ CONFIG_TOUCHSCREEN_ILI9881H=y
 # huaqin add for bring up ili9881h by liufurong at 20180719 end
 CONFIG_INPUT_QPNP_POWER_ON=y
 CONFIG_INPUT_UINPUT=y
+# Huaqin modify for ZQL1830-395 by zhaojunhai1 at 2018/7/17 start
+CONFIG_INPUT_FINGERPRINT=y
+CONFIG_CDFINGER_FP=y
+# Huaqin modify for ZQL1830-395 by zhaojunhai1 at 2018/7/17 end
+# Huaqin modify for ZQL1830-395 by zhaojunhai1 at 2018/7/26 start
+CONFIG_FOCAL_FP=y
+# Huaqin modify for ZQL1830-395 by zhaojunhai1 at 2018/7/26 end
 # CONFIG_SERIO_SERPORT is not set
 # CONFIG_VT is not set
 # CONFIG_LEGACY_PTYS is not set

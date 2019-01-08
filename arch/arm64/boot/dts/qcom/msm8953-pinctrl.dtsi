@@ -1929,5 +1929,121 @@
 				input-disable;
 			};
 		};
+
+		/* Huaqin modify for ZQL1830-395 by zhaojunhai1 at 2018/7/17 start */
+		cdfinger_reset {
+			cdfinger_reset_active: cdfinger_reset_active {
+				mux {
+					pins = "gpio140";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio140";
+					drive-strength = <2>;
+					bias-pull-up;
+				};
+			};
+
+			cdfinger_reset_sleep: cdfinger_reset_sleep {
+				mux {
+					pins = "gpio140";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio140";
+					drive-strength = <2>;
+					bias-pull-up;
+				};
+			};
+		};
+
+		cdfinger_irq {
+			cdfinger_irq_active: cdfinger_irq_active {
+				mux {
+					pins = "gpio48";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio48";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+
+			cdfinger_irq_sleep: cdfinger_irq_sleep {
+				mux {
+					pins = "gpio48";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio48";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+		};
+		/* Huaqin modify for ZQL1830-395 by zhaojunhai1 at 2018/7/17 end */
+
+		/* Huaqin modify for ZQL1830-395 by zhaojunhai1 at 2018/7/26 start */
+		focalfp_reset {
+			focalfp_reset_active: focalfp_reset_active {
+				mux {
+					pins = "gpio140";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio140";
+					drive-strength = <2>;
+					bias-pull-up;
+				};
+			};
+
+			focalfp_reset_sleep: focalfp_reset_sleep {
+				mux {
+					pins = "gpio140";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio140";
+					drive-strength = <2>;
+					bias-pull-up;
+				};
+			};
+		};
+
+		focalfp_irq {
+			focalfp_irq_active: focalfp_irq_active {
+				mux {
+					pins = "gpio48";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio48";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+
+			focalfp_irq_sleep: focalfp_irq_sleep {
+				mux {
+					pins = "gpio48";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio48";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+		};
+		/* Huaqin modify for ZQL1830-395 by zhaojunhai1 at 2018/7/26 end */
 	};
 };

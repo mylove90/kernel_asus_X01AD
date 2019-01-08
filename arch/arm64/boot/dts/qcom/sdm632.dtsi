@@ -1045,6 +1045,36 @@
 				< 1804800 787200>;      /* TURBO */
 		};
 	};
+
+   /* Huaqin modify for ZQL1830-395 by zhaojunhai1 at 2018/7/17 start */
+   cdfinger_fp {
+           compatible = "cdfinger,fingerprint";
+           interrupt-parent = <&tlmm>;
+           interrupts = <48 0x0>;
+           #vdd = <&pm8953_l10>;
+           cdfinger,reset_gpio = <&tlmm 140 0>;
+           cdfinger,irq_gpio = <&tlmm 48 0>;
+
+           pinctrl-names = "cdfinger_active","cdfinger_sleep";
+           pinctrl-0 = <&cdfinger_reset_active &cdfinger_irq_active>;
+           pinctrl-1 = <&cdfinger_reset_sleep &cdfinger_irq_sleep>;
+   };
+   /* Huaqin modify for ZQL1830-395 by zhaojunhai1 at 2018/7/17 end */
+
+   /* Huaqin modify for ZQL1830-395 by zhaojunhai1 at 2018/7/26 start */
+   focaltech_fp {
+           compatible = "focaltech,fingerprint";
+           interrupt-parent = <&tlmm>;
+           interrupts = <48 0x0>;
+           #vdd = <&pm8953_l10>;
+           fp,reset_gpio = <&tlmm 140 0>;
+           fp,irq_gpio = <&tlmm 48 0>;
+
+           pinctrl-names = "focalfp_active","focalfp_sleep";
+           pinctrl-0 = <&focalfp_reset_active &focalfp_irq_active>;
+           pinctrl-1 = <&focalfp_reset_sleep &focalfp_irq_sleep>;
+   };
+   /* Huaqin modify for ZQL1830-395 by zhaojunhai1 at 2018/7/26 end */
 };
 //huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
 &pmi632_charger {
