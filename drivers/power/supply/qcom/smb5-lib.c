@@ -3014,7 +3014,8 @@ static void smblib_micro_usb_plugin(struct smb_charger *chg, bool vbus_rising)
 		#if HQ_FACTORY_BUILD
 		#else
 		vote(chg->usb_icl_votable, ASUS_CHG_VOTER, true,
-						ICL_2000mA);
+						100 * 1000);
+						//ICL_2000mA);
 
 		#endif
 			schedule_delayed_work(&chg->asus_chg_flow_work, msecs_to_jiffies(12000));
