@@ -53,6 +53,23 @@
 #define CHG_DBG(...)  printk(KERN_ERR CHARGER_TAG __VA_ARGS__)
 #define CHG_DBG_E(...)  printk(KERN_ERR CHARGER_TAG ERROR_TAG __VA_ARGS__)
 //huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
+// Huaqin add for debug by tangqingyong at 2018/9/21 start
+#define UPDATE_CHG_INFO
+
+#ifdef UPDATE_CHG_INFO
+struct smbchg_info{
+	int	cap;
+	int	vbus;
+	int	vbat;
+	int	usb_c;
+	int	bat_c;
+	int	bat_t;
+	int	icl_settled;
+	int	sts;
+	int	chg_type;
+};
+#endif
+// Huaqin add for debug by tangqingyong at 2018/9/21 end
 
 enum print_reason {
 	PR_INTERRUPT	= BIT(0),
@@ -143,6 +160,12 @@ enum print_reason {
 #define VADC_THD_900MV  900
 #define VADC_THD_1000MV  1000
 //huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
+//huaqin added for ZQL1830-361 country code by tangqingyong at 20180820 start
+#define COUNTRY_BR 1
+#define COUNTRY_IN 1
+#define COUNTRY_OTHER 2
+//huaqin added for ZQL1830-361 country code by tangqingyong at 20180820 end
+#define ADC_CHG_TERM_MASK	32767
 
 enum smb_mode {
 	PARALLEL_MASTER = 0,
@@ -269,6 +292,9 @@ struct smb_irq_info {
 static const unsigned int smblib_extcon_cable[] = {
 	EXTCON_USB,
 	EXTCON_USB_HOST,
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert start
+	EXTCON_CHG_USB_DCP,
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert end
 	EXTCON_NONE,
 };
 
@@ -360,6 +386,9 @@ struct smb_charger {
 	int			*weak_chg_icl_ua;
 	struct qpnp_vadc_chip	*vadc_dev;
 	bool			pd_not_supported;
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert start
+	struct qpnp_vadc_chip	*vadc_usb_alert;
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert end
 
 	/* locks */
 	struct mutex		lock;
@@ -413,6 +442,10 @@ struct smb_charger {
 	struct delayed_work	asus_chg_flow_work;
 	struct delayed_work	asus_adapter_adc_work;
 //huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
+//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor start
+	struct delayed_work asus_min_monitor_work;
+	struct delayed_work asus_batt_RTC_work;
+//huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor end
 
 	/* alarm */
 	struct alarm		moisture_protection_alarm;
@@ -573,6 +606,10 @@ int smblib_get_prop_system_temp_level_max(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_input_current_limited(struct smb_charger *chg,
 				union power_supply_propval *val);
+// Huaqin add for ZQL1830-1470 by wenyaqi at 20181023 start
+int smblib_get_prop_charger_id(struct smb_charger *chg,
+				union power_supply_propval *val);
+// Huaqin add for ZQL1830-1470 by wenyaqi at 20181023 end
 int smblib_set_prop_input_suspend(struct smb_charger *chg,
 				const union power_supply_propval *val);
 int smblib_set_prop_batt_capacity(struct smb_charger *chg,
