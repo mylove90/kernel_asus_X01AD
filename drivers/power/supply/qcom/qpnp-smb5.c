@@ -234,9 +234,10 @@ extern bool asus_get_prop_usb_present(struct smb_charger *chg);
 extern void asus_smblib_stay_awake(struct smb_charger *chg);
 extern void asus_smblib_relax(struct smb_charger *chg);
 //huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor end
-//huaqin added for ZQL1830-199 by tangqingyong demoapp charge at 20180819 start
-bool demo_app_property_flag = 0;
-//huaqin added for ZQL1830-199 by tangqingyong demoapp charge at 20180819 end
+
+//archermind added Demoapp Charge by pengfei at 20190215 start
+int demo_app_property_flag = 0;
+//archermind added Demoapp Charge by pengfei at 20190215 end
 
 // Huaqin add for debug by tangqingyong at 2018/9/21 start
 static int __debug_mask = 0x4;
@@ -3026,40 +3027,74 @@ int32_t get_ID_vadc_voltage(struct smb_charger *chg)
 	return adc;
 }
 //huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
-//huaqin added for ZQL1830-199 by tangqingyong demoapp charge at 20180819 start
-static ssize_t demo_app_property_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t len)
+
+//archermind added Demoapp Charge by pengfei at 20190215 start
+#define DEMO_APP_CONTROL     "driver/demo_app_control"
+static ssize_t demo_app_control_write_proc(struct file *file, const char __user *buff, size_t size, loff_t *ppos)
 {
-	int tmp = 0;
-	tmp = buf[0] - 48;
-	CHG_DBG_E("%s: tmp = %d \n", __func__,tmp);
-	if (tmp == 0) {
-		demo_app_property_flag = false;
-		CHG_DBG("%s: demo_app_property_flag = 0\n", __func__);
-	} else if (tmp == 1) {
-		demo_app_property_flag = true;
-		CHG_DBG("%s: demo_app_property_flag = 1\n", __func__);
+	char wtire_data[8] = {0};
+
+	if (size >= 32)
+		return -EFAULT;
+
+	if (copy_from_user( &wtire_data, buff, size ))
+		return -EFAULT;
+	if (wtire_data[0] == '0'){
+		demo_app_property_flag = 0;
+		CHG_DBG("%s: demo_app_control_flag = 0\n", __func__);
+	}else{
+		demo_app_property_flag = 1;
+		CHG_DBG("%s: demo_app_control_flag = 1\n", __func__);
 	}
+
+	return size;
+}
+
+ssize_t demo_app_control_read_proc(struct file *file, char __user *page, size_t size, loff_t *ppos)
+{
+	char read_data[8]={0};
+	int len = 0;
+	int rc;
+
+	if (*ppos)
+		return 0;
+
+	len = sprintf(read_data,"%d\n", demo_app_property_flag);
+	printk(" %s , len = %d, data = %s\n", __func__, len, read_data);
+	rc = copy_to_user(page, read_data, len);
+	if (rc < 0)
+		return -EFAULT;
+
+	*ppos += len;
+
 	return len;
 }
 
-static ssize_t demo_app_property_show(struct device *dev, struct device_attribute *attr, char *buf)
+static const struct file_operations demo_app_control_proc_ops = {
+    .read = demo_app_control_read_proc,
+    .write = demo_app_control_write_proc,
+};
+
+static struct proc_dir_entry *demo_app_control_entry = NULL;
+static int init_proc_demo_app_control(void)
 {
-       return sprintf(buf, "%d\n", demo_app_property_flag);
+	int ret =0 ;
+
+	demo_app_control_entry = proc_create(DEMO_APP_CONTROL, 0666, NULL, &demo_app_control_proc_ops);
+
+	if (demo_app_control_entry == NULL)
+	{
+		printk("create_proc entry %s failed\n", DEMO_APP_CONTROL);
+		return -ENOMEM;
+	}
+	else
+	{
+		printk("create proc entry %s success", DEMO_APP_CONTROL);
+		ret = 0;
+	}
+	return ret;
 }
-
-static DEVICE_ATTR(demo_app_property, 0664, demo_app_property_show, demo_app_property_store);
-
-static struct attribute *asus_smblib_attrs[] = {
-	&dev_attr_demo_app_property.attr,
-	NULL
-};
-
-static const struct attribute_group asus_smblib_attr_group = {
-	.attrs = asus_smblib_attrs,
-};
-//huaqin added for ZQL1830-199 by tangqingyong demoapp charge at 20180819 end
-
+//archermind added Demoapp Charge by pengfei at 20190215 end
 
 static int smb5_probe(struct platform_device *pdev)
 {
@@ -3155,6 +3190,10 @@ static int smb5_probe(struct platform_device *pdev)
 //huaqin add by tangqingyong at 20180730 for ZQL1830-199 start
 	init_proc_charger_limit();
 //huaqin add by tangqingyong at 20180730 for ZQL1830-199 end
+
+//archermind added Demoapp Charge by pengfei at 20190215 start
+	init_proc_demo_app_control();
+//archermind added Demoapp Charge by pengfei at 20190215 end
 	/* set driver data before resources request it */
 	platform_set_drvdata(pdev, chip);
 
@@ -3244,14 +3283,6 @@ static int smb5_probe(struct platform_device *pdev)
 		pr_err("Failed in post init rc=%d\n", rc);
 		goto free_irq;
 	}
-//huaqin added for ZQL1830-199 by tangqingyong demoapp charge at 20180819 start
-	rc = sysfs_create_group(&chg->dev->kobj, &asus_smblib_attr_group);
-	if (rc < 0) {
-		pr_err("create node demo_app_property failed!! rc=%d\n", rc);
-		goto cleanup;
-	}
-//huaqin added for ZQL1830-199 by tangqingyong demoapp charge at 20180819 end
-
 	smb5_create_debugfs(chip);
 
 	rc = smb5_show_charger_status(chip);
@@ -3274,9 +3305,6 @@ cleanup:
 //huaqin add by tangqingyong at 20180730 for ZQL1830-199 start
 	remove_proc_charger_limit();
 //huaqin add by tangqingyong at 20180730 for ZQL1830-199 end
-//huaqin added for ZQL1830-199 by tangqingyong demoapp charge at 20180819 start
-	sysfs_remove_group(&chg->dev->kobj, &asus_smblib_attr_group);
-//huaqin added for ZQL1830-199 by tangqingyong demoapp charge at 20180819 end
 
 	return rc;
 }
