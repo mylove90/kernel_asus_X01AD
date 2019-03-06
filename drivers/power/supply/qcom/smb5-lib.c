@@ -1669,7 +1669,10 @@ void asus_update_usb_connector_state(struct smb_charger *chg)
 
 	if(phy_volta  < CHG_ALERT_HOT_NTC_VOLTAFE){
 		if (!usb_otg_present)
-			smblib_set_usb_suspend(chg, true);
+			//pengfei fix chance no charging bug 0
+			//smblib_set_usb_suspend(chg, true);
+			rc = 0;
+			//pengfei fix chance no charging bug 1
 		else{
 				rc = smblib_masked_write(chg, DCDC_CMD_OTG_REG, OTG_EN_BIT, 0);
 				if (rc < 0) {
