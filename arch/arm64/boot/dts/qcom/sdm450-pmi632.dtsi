@@ -52,6 +52,9 @@
 &pmi632_vadc {
 	pinctrl-names = "default";
 	pinctrl-0 = <&quiet_therm_default &smb_therm_default>;
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert start
+	pinctrl-0 = <&quiet_therm_default &smb_therm_default &gpio1_adc_default>;
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert end
 };
 
 &pmi632_gpios {
@@ -68,6 +71,17 @@
 			bias-high-impedance;
 		};
 	};
+
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert start
+	gpio1_adc {
+		gpio1_adc_default: gpio1_adc_default {
+			pins = "gpio1";
+			function = "normal";
+			bias-disable;
+			bias-high-impedance;
+		};
+	};
+//Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert end
 };
 
 &pmi632_qg {
