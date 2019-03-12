@@ -93,11 +93,6 @@ void asus_update_usb_connector_state(struct smb_charger *chg);
 //Huaqin added by tangqingyong for ZQL1830-385 at 20180818 for USB alert end
 //huaqin added for ZQL1830-199 by tangqingyong demoapp charge at 20180819 start
 extern bool demo_app_property_flag;
-
-//archermind added fast charge node by pengfei at 20190312 start
-static bool fast_charger_flag = false;
-//archermind added fast charge node by pengfei at 20190312 end
-
 #define	DEMO_DISCHG_THD			60
 #define	DEMO_CHG_THD			58
 int asus_get_prop_batt_capacity(struct smb_charger *chg);
@@ -3361,7 +3356,6 @@ static void smblib_micro_usb_plugin(struct smb_charger *chg, bool vbus_rising)
 		smblib_uusb_removal(chg);
 //huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
 		asus_flow_processing = 0;
-		fast_charger_flag = false;
 	}else{
 		printk("enter smblib_micro_usb_plugin vbus_rising=1\n");
 		if (!asus_flow_processing) {
@@ -4224,52 +4218,6 @@ static void CHG_TYPE_judge(struct smb_charger *chg)
 	printk("CHG_TYPE_judge  ASUS_ADAPTER_ID=%d\n",ASUS_ADAPTER_ID);
 }
 
-//archermind added fast charge node by pengfei at 20190312 start
-#define FAST_CHARGER     "driver/fast_charger"
-#define LEN_BUF 8
-ssize_t fast_charger_read_proc(struct file *file, char __user *page, size_t size, loff_t *ppos)
-{
-	char read_data[LEN_BUF]={0};
-	int len = 0;
-	int rc;
-
-	if (*ppos)
-		return 0;
-
-	len = sprintf(read_data,"%d\n", fast_charger_flag);
-	printk(" %s , len = %d, data = %s\n", __func__, len, read_data);
-	rc = copy_to_user(page, read_data, len);
-	if (rc < 0)
-		return -EFAULT;
-
-	*ppos += len;
-
-	return len;
-}
-
-static const struct file_operations fast_charger_proc_ops = {
-    .read = fast_charger_read_proc,
-    .write = NULL,
-};
-
-static struct proc_dir_entry *fast_charger_node_entry = NULL;
-static int init_fast_charger_node(void)
-{
-	int ret =0 ;
-
-	fast_charger_node_entry = proc_create(FAST_CHARGER, 0444, NULL, &fast_charger_proc_ops);
-
-	if (fast_charger_node_entry == NULL) {
-		printk("create_proc entry %s failed\n", FAST_CHARGER);
-		return -ENOMEM;
-	} else {
-		printk("create proc entry %s success", FAST_CHARGER);
-		ret = 0;
-	}
-	return ret;
-}
-//archermind added fast charge node by pengfei at 20190312 end
-
 void asus_adapter_adc_work(struct work_struct *work)
 {
 	int rc;
@@ -4277,8 +4225,8 @@ void asus_adapter_adc_work(struct work_struct *work)
 
 	struct smb_charger *chg = container_of(work, struct smb_charger,
 					asus_adapter_adc_work.work);
-	printk("enter asus_adapter_adc_work\n");
 #if 0
+	printk("enter asus_adapter_adc_work\n");
 	if (!asus_get_prop_usb_present(chg)) {
 		smblib_uusb_removal(chg);
 		return;
@@ -4339,12 +4287,6 @@ void asus_adapter_adc_work(struct work_struct *work)
 #else
 	vote(chg->usb_icl_votable, ASUS_CHG_VOTER, true,
 					usb_max_current);
-	if(ICL_2000mA == usb_max_current){
-		printk("pengfei 5V2A is found [%s][%s]\n", __func__, __FILE__);
-		fast_charger_flag = true;
-	} else {
-		fast_charger_flag = false;
-	}
 #endif
 //huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor start
 	smblib_asus_monitor_start(chg, 0);
@@ -5026,8 +4968,6 @@ int smblib_init(struct smb_charger *chg)
 		smblib_err(chg, "Unsupported mode %d\n", chg->mode);
 		return -EINVAL;
 	}
-
-	init_fast_charger_node();
 
 	return rc;
 }
