@@ -239,6 +239,10 @@ extern void asus_smblib_relax(struct smb_charger *chg);
 int demo_app_property_flag = 0;
 //archermind added Demoapp Charge by pengfei at 20190215 end
 
+//archermind added fast charge node by pengfei at 20190312 start
+extern int asus_charger_type;
+//archermind added fast charge node by pengfei at 20190312 end
+
 // Huaqin add for debug by tangqingyong at 2018/9/21 start
 static int __debug_mask = 0x4;
 // Huaqin add for debug by tangqingyong at 2018/9/21 end
@@ -648,6 +652,7 @@ static enum power_supply_property smb5_usb_props[] = {
 	POWER_SUPPLY_PROP_HVDCP_OPTI_ALLOWED,
 	POWER_SUPPLY_PROP_QC_OPTI_DISABLE,
 	POWER_SUPPLY_PROP_MOISTURE_DETECTED,
+	POWER_SUPPLY_PROP_ASUS_CHRG_TYPE,
 };
 
 static int smb5_usb_get_prop(struct power_supply *psy,
@@ -788,6 +793,9 @@ static int smb5_usb_get_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_MOISTURE_DETECTED:
 		val->intval = chg->moisture_present;
+		break;
+	case POWER_SUPPLY_PROP_ASUS_CHRG_TYPE:
+		val->intval = asus_charger_type;
 		break;
 	default:
 		pr_err("get prop %d is not supported in usb\n", psp);

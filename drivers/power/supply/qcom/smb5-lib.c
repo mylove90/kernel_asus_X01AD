@@ -102,6 +102,12 @@ extern int charger_limit_enable_flag;
 extern int charger_limit_value;
 //huaqin added for life span multiplication by tangqingyong  at 20180820 end
 
+// archermind added fast charge node by pengfei at 20190312 start
+#define ASUS_CHARGER_UNKNOWN 0x00
+#define ASUS_CHARGER_FAST    0x01
+int asus_charger_type = ASUS_CHARGER_UNKNOWN;
+// archermind added fast charge node by pengfei at 20190312 end
+
 static void smblib_uusb_removal(struct smb_charger *chg);
 
 void asus_smblib_stay_awake(struct smb_charger *chg)
@@ -3356,6 +3362,7 @@ static void smblib_micro_usb_plugin(struct smb_charger *chg, bool vbus_rising)
 		smblib_uusb_removal(chg);
 //huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
 		asus_flow_processing = 0;
+		asus_charger_type = ASUS_CHARGER_UNKNOWN;
 	}else{
 		printk("enter smblib_micro_usb_plugin vbus_rising=1\n");
 		if (!asus_flow_processing) {
@@ -4225,8 +4232,8 @@ void asus_adapter_adc_work(struct work_struct *work)
 
 	struct smb_charger *chg = container_of(work, struct smb_charger,
 					asus_adapter_adc_work.work);
-#if 0
 	printk("enter asus_adapter_adc_work\n");
+#if 0
 	if (!asus_get_prop_usb_present(chg)) {
 		smblib_uusb_removal(chg);
 		return;
@@ -4287,6 +4294,13 @@ void asus_adapter_adc_work(struct work_struct *work)
 #else
 	vote(chg->usb_icl_votable, ASUS_CHG_VOTER, true,
 					usb_max_current);
+
+	if (ICL_2000mA == usb_max_current) {
+		printk("pengfei 5V2A is found [%s][%s]\n", __func__, __FILE__);
+		asus_charger_type = ASUS_CHARGER_FAST;
+	} else {
+		asus_charger_type = ASUS_CHARGER_UNKNOWN;
+	}
 #endif
 //huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor start
 	smblib_asus_monitor_start(chg, 0);
