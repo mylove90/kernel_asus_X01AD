@@ -41,6 +41,12 @@
 				qcom,pon-type = <0>;
 				qcom,pull-up = <1>;
 				linux,code = <116>;
+			/* Huaqin add for ZQL1830-18 by lanshiming at 2018/7/19 start*/
+				qcom,support-reset = <1>;
+				qcom,s1-timer = <10256>;
+				qcom,s2-timer = <10>;
+				qcom,s2-type = <4>;
+			/* Huaqin add for ZQL1830-18 by lanshiming at 2018/7/19 end*/
 			};
 
 			qcom,pon_2 {
