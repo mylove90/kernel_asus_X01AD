@@ -219,6 +219,11 @@ out:
 	return err;
 }
 
+static inline void copy_i_size(struct inode *dest, const struct inode *src)
+{
+    dest->i_size = src->i_size;
+}
+
 static int sdcardfs_open(struct inode *inode, struct file *file)
 {
 	int err = 0;
@@ -265,10 +270,14 @@ static int sdcardfs_open(struct inode *inode, struct file *file)
 		sdcardfs_set_lower_file(file, lower_file);
 	}
 
-	if (err)
+	if (err) {
 		kfree(SDCARDFS_F(file));
-	else
-		sdcardfs_copy_and_fix_attrs(inode, sdcardfs_lower_inode(inode));
+	}else {
+        if( (file->f_mode & FMODE_READ) == FMODE_READ && (file->f_mode & FMODE_WRITE) == 0) {
+            copy_i_size(d_inode(dentry), file_inode(lower_file));
+        }
+        sdcardfs_copy_and_fix_attrs(inode, sdcardfs_lower_inode(inode));
+    }
 
 out_revert_cred:
 	REVERT_CRED(saved_cred);
