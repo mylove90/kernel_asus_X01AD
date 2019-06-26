@@ -185,7 +185,7 @@ struct qpnp_lpg_channel {
 	u8				src_sel;
 	u8				subtype;
 	bool				lut_written;
-	int				current_period_ns;
+	u32				current_period_ns;
 	int				current_duty_ns;
 };
 
@@ -723,7 +723,7 @@ static int qpnp_lpg_set_ramp_config(struct qpnp_lpg_channel *lpg)
 	return rc;
 }
 
-static void __qpnp_lpg_calc_pwm_period(int period_ns,
+static void __qpnp_lpg_calc_pwm_period(u32 period_ns,
 			struct lpg_pwm_config *pwm_config)
 {
 	struct qpnp_lpg_channel *lpg = container_of(pwm_config,
@@ -812,7 +812,7 @@ static void __qpnp_lpg_calc_pwm_period(int period_ns,
 	pr_debug("Actual period: %dns\n", pwm_config->best_period_ns);
 }
 
-static void __qpnp_lpg_calc_pwm_duty(int period_ns, int duty_ns,
+static void __qpnp_lpg_calc_pwm_duty(u32 period_ns, int duty_ns,
 			struct lpg_pwm_config *pwm_config)
 {
 	u16 pwm_value, max_pwm_value;
@@ -829,11 +829,11 @@ static void __qpnp_lpg_calc_pwm_duty(int period_ns, int duty_ns,
 }
 
 static int qpnp_lpg_pwm_config(struct pwm_chip *pwm_chip,
-		struct pwm_device *pwm, int duty_ns, int period_ns)
+		struct pwm_device *pwm, int duty_ns, int period_ns1)
 {
 	struct qpnp_lpg_channel *lpg;
 	int rc = 0;
-
+    u32 period_ns=(u32)period_ns1;
 	lpg = pwm_dev_to_qpnp_lpg(pwm_chip, pwm);
 	if (lpg == NULL) {
 		dev_err(pwm_chip->dev, "lpg not found\n");
