@@ -179,10 +179,8 @@ static int qpnp_tri_led_set(struct qpnp_led_dev *led)
 		else
 			duty_ns = on_ms * NSEC_PER_MSEC;
 		/*Huaqin modify for ZQL1830-827 by yangliguo at 2018/10/01 start */
-		/*if (on_ms + off_ms > UINT_MAX / NSEC_PER_MSEC) {
-			period_ns = UINT_MAX;*/
 		if (on_ms + off_ms > UINT_MAX / NSEC_PER_MSEC) {
- 			period_ns = UINT_MAX;
+			period_ns = UINT_MAX;
 			duty_ns = (period_ns / (on_ms + off_ms)) * on_ms;
 		} else {
 			period_ns = (on_ms + off_ms) * NSEC_PER_MSEC;
