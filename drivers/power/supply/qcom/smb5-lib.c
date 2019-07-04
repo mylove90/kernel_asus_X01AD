@@ -4265,8 +4265,7 @@ void asus_adapter_adc_work(struct work_struct *work)
 		else
 		{
 			printk("ASUS_ADAPTER_ID  OTHERS \n");
-			//usb_max_current = ICL_1000mA;
-			usb_max_current = ICL_2000mA;
+			usb_max_current = ICL_1000mA;
 		}
 //huaqin added for ZQL1830-1602 country code by tangqingyong at 20181101 end
 //huaqin added for ZQL1830-361 country code by tangqingyong at 20180820 end
