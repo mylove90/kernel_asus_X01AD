@@ -698,7 +698,6 @@ static int wlfw_vbatt_send_sync_msg(struct icnss_priv *priv,
 	struct wlfw_vbatt_req_msg_v01 req;
 	struct wlfw_vbatt_resp_msg_v01 resp;
 	struct msg_desc req_desc, resp_desc;
-	uint64_t max_mapped_addr;
 
 	if (!priv->wlfw_clnt) {
 		ret = -ENODEV;
@@ -1308,6 +1307,7 @@ static int wlfw_msa_mem_info_send_sync_msg(void)
 	struct wlfw_msa_info_req_msg_v01 req;
 	struct wlfw_msa_info_resp_msg_v01 resp;
 	struct msg_desc req_desc, resp_desc;
+	uint64_t max_mapped_addr;
 
 	if (!penv || !penv->wlfw_clnt)
 		return -ENODEV;
