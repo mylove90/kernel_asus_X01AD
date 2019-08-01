@@ -7,6 +7,7 @@ qcom,3684136_Asus_ZB632KLcos_4000mAh {
     qcom,fastchg-current-ma = <2000>;
 //huaqin add by wenyaqi for jeita and FCC 2000mA at 20181016 end
     qcom,batt-id-kohm = <100>;
+    qcom,nom-batt-capacity-mah = <4000>;
     qcom,battery-beta = <3435>;
     qcom,battery-therm-kohm = <10>;
     qcom,battery-type = "3684136_Asus_ZB632KLcos_4000mAh_averaged_MasterSlave_Oct15th2018";

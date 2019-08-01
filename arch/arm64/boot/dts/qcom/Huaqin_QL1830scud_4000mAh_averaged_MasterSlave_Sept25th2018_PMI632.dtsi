@@ -5,6 +5,7 @@ qcom,3594388_Huaqin_QL1830scud_4000mAh {
     qcom,max-voltage-uv = <4350000>;
     qcom,fg-cc-cv-threshold-uv = <4340000>;
     qcom,fastchg-current-ma = <2000>;
+    qcom,nom-batt-capacity-mah = <4000>;
 //huaqin add by tangqingyong for jeita and FV 4.35V at 20180928 end
     qcom,batt-id-kohm = <51>;
     qcom,battery-beta = <3435>;

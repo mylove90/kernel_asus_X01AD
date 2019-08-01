@@ -7,6 +7,7 @@ qcom,3633530_Huaqin_C11P1805asus_4000mAh {
     qcom,fastchg-current-ma = <2200>;
 //huaqin add by tangqingyong for ZQL1830-194 jeita & step charge at 20180823 end
     qcom,batt-id-kohm = <51>;
+    qcom,nom-batt-capacity-mah = <4000>;
     qcom,battery-beta = <3435>;
     qcom,battery-therm-kohm = <10>;
     qcom,battery-type = "3633530_Huaqin_C11P1805asus_4000mAh_averaged_MasterSlave_Aug22nd2018";

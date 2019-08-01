@@ -6,6 +6,7 @@ qcom,3666803_Huaqin_QL1830_VK_4020mAH {
 //huaqin add by wenyaqi for jeita and FV 4.35V at 20181105 end
     qcom,fastchg-current-ma = <2000>;
     qcom,batt-id-kohm = <10>;
+    qcom,nom-batt-capacity-mah = <4000>;
     qcom,battery-beta = <3380>;
     qcom,battery-therm-kohm = <10>;
     qcom,battery-type = "Huaqin_QL1830_Third_4020mAH_averaged_MasterSlave_Nov5th2018";
