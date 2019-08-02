@@ -1013,6 +1013,15 @@ int smblib_mapping_cc_delta_from_field_value(struct smb_chg_param *param,
 	return 0;
 }
 
+void reset_charging(struct smb_charger *chg)
+{
+	union power_supply_propval capacity_val = {0, };
+
+	smblib_set_prop_input_suspend(chg, &capacity_val);
+
+	return;
+}
+
 static void smblib_uusb_removal(struct smb_charger *chg)
 {
 //huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 start
@@ -1119,7 +1128,9 @@ static void smblib_uusb_removal(struct smb_charger *chg)
 	asus_smblib_relax(chg);
 //huaqin add by tangqingyong at 20180813 for ZQL1830-364 asus_monitor end
 //huaqin added for ZQL1830-357 by tangqingyong adapter_id recognize at 20180808 end
+	reset_charging(chg);
 }
+
 
 void smblib_suspend_on_debug_battery(struct smb_charger *chg)
 {
