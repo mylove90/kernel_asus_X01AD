@@ -4870,7 +4870,7 @@ static void update_battery_health(struct qpnp_qg *chip){
 	}
 
 	if( g_bathealth_trigger ){
-		qg_get_battery_capacity(chip, &bat_current);
+		qg_get_battery_current(chip, &bat_current);
 		//bat_current = get_sram_prop_now(chip, FG_DATA_CURRENT); cmadd
 
 		g_bat_health_data.accumulate_time += g_health_upgrade_upgrade_time;
